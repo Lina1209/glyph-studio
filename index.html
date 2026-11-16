@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GlyphStudio — Генератор рукописных шрифтов</title>
+  <meta name="description" content="Создайте свой рукописный шрифт .TTF прямо в браузере. Кириллица, латиница, экспорт TTF." />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="GlyphStudio" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+  <style>
+    html, body { height: 100%; }
+    #drawSvg { touch-action: none; }
+    .glyph-btn { min-height: 2.5rem; }
+    @media (max-width: 1023px) {
+      .canvas-box { width: min(360px, 92vw) !important; height: min(360px, 92vw) !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <header class="bg-slate-800 border-b border-slate-700 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-indigo-500 rounded-lg flex items-center justify-center font-bold text-lg shadow">Ф</div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-bold tracking-tight leading-tight">GlyphStudio
+          <span class="text-[10px] font-normal text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded ml-1 align-middle">MVP</span>
+        </h1>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Рукописный шрифт в браузере</p>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <input id="fontName" type="text" value="MyHandwriting" placeholder="Название шрифта"
+        class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm w-36 sm:w-44 focus:outline-none focus:border-indigo-500" />
+      <button id="saveProjectBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm" title="Сохранить в браузер">💾</button>
+      <button id="downloadBtn"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-3 sm:px-4 py-1.5 rounded-lg text-sm transition shadow-lg shadow-indigo-500/20">
+        Скачать .TTF
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- Glyph grid -->
+    <section class="lg:col-span-4 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col h-[420px] lg:h-[640px]">
+      <div class="flex items-center justify-between mb-3 gap-2">
+        <h2 class="font-semibold text-slate-300">Символы</h2>
+        <span id="progressText" class="text-xs text-slate-400">Готово: 0</span>
+      </div>
+      <div class="flex gap-2 mb-3">
+        <button type="button" data-set="cyr" class="set-btn text-xs px-2 py-1 rounded bg-indigo-600">Кир.</button>
+        <button type="button" data-set="lat" class="set-btn text-xs px-2 py-1 rounded bg-slate-700">Лат.</button>
+        <button type="button" data-set="num" class="set-btn text-xs px-2 py-1 rounded bg-slate-700">123</button>
+        <button type="button" data-set="all" class="set-btn text-xs px-2 py-1 rounded bg-slate-700">Все</button>
+      </div>
+      <div id="glyphGrid" class="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-6 gap-1.5 overflow-y-auto pr-1 flex-1 content-start"></div>
+    </section>
+
+    <!-- Canvas -->
+    <section class="lg:col-span-5 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col items-center">
+      <div class="w-full flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <div>
+          <span class="text-xs text-slate-400 uppercase tracking-wider">Редактирование</span>
+          <div id="currentCharLabel" class="text-2xl font-bold text-indigo-400">А</div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button id="undoBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium">↩ Отменить</button>
+          <button id="clearBtn" class="bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 px-3 py-1.5 rounded-lg text-xs font-medium">Очистить</button>
+        </div>
+      </div>
+
+      <div class="canvas-box relative w-[360px] h-[360px] bg-white rounded-xl shadow-inner overflow-hidden cursor-crosshair select-none border-2 border-slate-600">
+        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 360 360" aria-hidden="true">
+          <line x1="0" y1="70" x2="360" y2="70" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
+          <text x="8" y="65" fill="#94a3b8" font-size="10">Прописные</text>
+          <line x1="0" y1="145" x2="360" y2="145" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
+          <text x="8" y="140" fill="#94a3b8" font-size="10">Строчные</text>
+          <line x1="0" y1="270" x2="360" y2="270" stroke="#f43f5e" stroke-width="1.5" />
+          <text x="8" y="264" fill="#f43f5e" font-size="10" font-weight="bold">Базовая линия</text>
+          <line x1="0" y1="330" x2="360" y2="330" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
+        </svg>
+        <svg id="drawSvg" class="relative z-10 w-full h-full" viewBox="0 0 360 360"></svg>
+      </div>
+
+      <div class="w-full grid grid-cols-2 gap-4 mt-4 bg-slate-900/60 p-3 rounded-lg border border-slate-700/60">
+        <div>
+          <label class="flex justify-between text-xs text-slate-400 mb-1">
+            <span>Толщина пера</span><span id="sizeVal">16px</span>
+          </label>
+          <input id="brushSize" type="range" min="6" max="36" value="16" class="w-full accent-indigo-500" />
+        </div>
+        <div>
+          <label class="flex justify-between text-xs text-slate-400 mb-1">
+            <span>Заострение</span><span id="thinningVal">0.6</span>
+          </label>
+          <input id="brushThinning" type="range" min="0" max="0.9" step="0.1" value="0.6" class="w-full accent-indigo-500" />
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-2 text-center">Рисуйте пальцем или мышью. Прогресс сохраняется автоматически.</p>
+    </section>
+
+    <!-- Preview -->
+    <section class="lg:col-span-3 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col min-h-[280px]">
+      <h2 class="font-semibold text-slate-300 mb-2">Проверка шрифта</h2>
+      <p class="text-xs text-slate-400 mb-3">Нарисуйте буквы и введите слово:</p>
+      <textarea id="previewInput" rows="3"
+        class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-indigo-500 mb-4"
+        placeholder="Введите текст...">ПРИВЕТ</textarea>
+      <div class="flex-1 bg-white rounded-xl p-4 text-slate-900 overflow-auto flex flex-col justify-center items-center border border-slate-600 min-h-[120px]">
+        <div id="livePreviewOutput" class="text-4xl sm:text-5xl break-all text-center leading-relaxed" style="font-family: 'LiveCustomFont', Georgia, sans-serif;">
+          ПРИВЕТ
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-3 text-center">Ненарисованные буквы — обычным шрифтом.</p>
+      <button id="clearAllBtn" class="mt-3 text-xs text-rose-400 hover:text-rose-300 underline">Очистить весь проект</button>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-500">
+    GlyphStudio · рукописные шрифты в браузере · MIT
+  </footer>
+
+  <script type="module">
+    import { getStroke } from 'https://cdn.skypack.dev/perfect-freehand@1.2.2';
+
+    const STORAGE_KEY = 'glyphstudio_project_v1';
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    const SETS = {
+      cyr: [...'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'],
+      lat: [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'],
+      num: [...'0123456789!?.,-:;()«»'],
+    };
+    SETS.all = [...SETS.cyr, ...SETS.lat, ...SETS.num];
+
+    let visibleChars = SETS.cyr;
+    const glyphData = {};
+    let currentChar = 'А';
+    let currentPoints = [];
+    let isDrawing = false;
+    let liveFontUrl = null;
+
+    const glyphGrid = document.getElementById('glyphGrid');
+    const drawSvg = document.getElementById('drawSvg');
+    const currentCharLabel = document.getElementById('currentCharLabel');
+    const brushSizeInput = document.getElementById('brushSize');
+    const brushThinningInput = document.getElementById('brushThinning');
+    const sizeVal = document.getElementById('sizeVal');
+    const thinningVal = document.getElementById('thinningVal');
+    const previewInput = document.getElementById('previewInput');
+    const livePreviewOutput = document.getElementById('livePreviewOutput');
+    const progressText = document.getElementById('progressText');
+
+    function loadProject() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.glyphs) Object.assign(glyphData, data.glyphs);
+        if (data.fontName) document.getElementById('fontName').value = data.fontName;
+      } catch (e) {}
+    }
+
+    function saveProject() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          fontName: document.getElementById('fontName').value,
+          glyphs: glyphData,
+          savedAt: new Date().toISOString()
+        }));
+      } catch (e) {}
+    }
+
+    function getSvgPathFromStroke(stroke) {
+      if (!stroke.length) return '';
+      const d = stroke.reduce((acc, [x0, y0], i, arr) => {
+        const [x1, y1] = arr[(i + 1) % arr.length];
+        acc.push(x0.toFixed(1), y0.toFixed(1), ((x0 + x1) / 2).toFixed(1), ((y0 + y1) / 2).toFixed(1));
+        return acc;
+      }, ['M', ...stroke[0].map(n => n.toFixed(1)), 'Q']);
+      d.push('Z');
+      return d.join(' ');
+    }
+
+    function renderGrid() {
+      glyphGrid.innerHTML = '';
+      let completed = 0;
+      const all = SETS.all;
+      all.forEach(ch => {
+        if (glyphData[ch] && glyphData[ch].length) completed++;
+      });
+      progressText.textContent = `Готово: ${completed} / ${all.length}`;
+
+      visibleChars.forEach(char => {
+        const has = glyphData[char] && glyphData[char].length > 0;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = char;
+        btn.className = `glyph-btn rounded-lg font-medium text-sm transition flex items-center justify-center border ${
+          char === currentChar
+            ? 'bg-indigo-600 border-indigo-400 text-white shadow-md'
+            : has
+              ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/60'
+              : 'bg-slate-900/70 border-slate-700 text-slate-400 hover:bg-slate-700'
+        }`;
+        btn.onclick = () => selectChar(char);
+        glyphGrid.appendChild(btn);
+      });
+    }
+
+    function selectChar(char) {
+      currentChar = char;
+      currentCharLabel.textContent = char;
+      currentPoints = [];
+      isDrawing = false;
+      renderGrid();
+      renderCanvas();
+    }
+
+    function renderCanvas() {
+      drawSvg.innerHTML = '';
+      const strokes = glyphData[currentChar] || [];
+      strokes.forEach(s => {
+        const outline = getStroke(s.points, {
+          size: s.size,
+          thinning: s.thinning,
+          smoothing: 0.5,
+          streamline: 0.5,
+          last: true
+        });
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', getSvgPathFromStroke(outline));
+        path.setAttribute('fill', '#0f172a');
+        drawSvg.appendChild(path);
+      });
+
+      if (isDrawing && currentPoints.length > 0) {
+        const outline = getStroke(currentPoints, {
+          size: Number(brushSizeInput.value),
+          thinning: Number(brushThinningInput.value),
+          smoothing: 0.5,
+          streamline: 0.5,
+          last: true
+        });
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', getSvgPathFromStroke(outline));
+        path.setAttribute('fill', '#4f46e5');
+        drawSvg.appendChild(path);
+      }
+    }
+
+    function getPointerPos(e) {
+      const rect = drawSvg.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 360;
+      const y = ((e.clientY - rect.top) / rect.height) * 360;
+      const pressure = (typeof e.pressure === 'number' && e.pressure > 0) ? e.pressure : 0.5;
+      return [x, y, pressure];
+    }
+
+    drawSvg.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { drawSvg.setPointerCapture(e.pointerId); } catch (_) {}
+      isDrawing = true;
+      currentPoints = [getPointerPos(e)];
+      renderCanvas();
+    });
+
+    drawSvg.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+      currentPoints.push(getPointerPos(e));
+      renderCanvas();
+    });
+
+    function endStroke(e) {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (currentPoints.length > 2) {
+        if (!glyphData[currentChar]) glyphData[currentChar] = [];
+        glyphData[currentChar].push({
+          points: currentPoints,
+          size: Number(brushSizeInput.value),
+          thinning: Number(brushThinningInput.value)
+        });
+        saveProject();
+        updateLiveFont();
+      }
+      currentPoints = [];
+      renderCanvas();
+      renderGrid();
+    }
+
+    drawSvg.addEventListener('pointerup', endStroke);
+    drawSvg.addEventListener('pointercancel', endStroke);
+    drawSvg.addEventListener('pointerleave', (e) => {
+      if (isDrawing && e.buttons === 0) endStroke(e);
+    });
+
+    document.getElementById('undoBtn').onclick = () => {
+      if (glyphData[currentChar] && glyphData[currentChar].length) {
+        glyphData[currentChar].pop();
+        saveProject();
+        renderCanvas();
+        renderGrid();
+        updateLiveFont();
+      }
+    };
+
+    document.getElementById('clearBtn').onclick = () => {
+      glyphData[currentChar] = [];
+      saveProject();
+      renderCanvas();
+      renderGrid();
+      updateLiveFont();
+    };
+
+    document.getElementById('clearAllBtn').onclick = () => {
+      if (!confirm('Удалить все нарисованные буквы?')) return;
+      Object.keys(glyphData).forEach(k => delete glyphData[k]);
+      saveProject();
+      renderCanvas();
+      renderGrid();
+      updateLiveFont();
+    };
+
+    document.getElementById('saveProjectBtn').onclick = () => {
+      saveProject();
+      alert('Проект сохранён в браузере');
+    };
+
+    brushSizeInput.oninput = () => { sizeVal.textContent = brushSizeInput.value + 'px'; };
+    brushThinningInput.oninput = () => { thinningVal.textContent = brushThinningInput.value; };
+    previewInput.oninput = () => { livePreviewOutput.textContent = previewInput.value || ' '; };
+
+    document.querySelectorAll('.set-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.set-btn').forEach(b => b.className = 'set-btn text-xs px-2 py-1 rounded bg-slate-700');
+        btn.className = 'set-btn text-xs px-2 py-1 rounded bg-indigo-600';
+        visibleChars = SETS[btn.dataset.set] || SETS.all;
+        renderGrid();
+      });
+    });
+
+    function buildOpenTypeFont() {
+      if (typeof opentype === 'undefined') throw new Error('opentype.js не загружен');
+
+      const unitsPerEm = 1000;
+      const ascender = 800;
+      const descender = -200;
+      const baselineY = 270;
+      const scale = 1000 / 360;
+
+      const notdefGlyph = new opentype.Glyph({
+        name: '.notdef', unicode: 0, advanceWidth: 500, path: new opentype.Path()
+      });
+      const spaceGlyph = new opentype.Glyph({
+        name: 'space', unicode: 32, advanceWidth: 350, path: new opentype.Path()
+      });
+      const glyphs = [notdefGlyph, spaceGlyph];
+
+      Object.keys(glyphData).forEach(char => {
+        const strokes = glyphData[char];
+        if (!strokes || !strokes.length) return;
+
+        const fontPath = new opentype.Path();
+        let minX = Infinity;
+        let maxX = -Infinity;
+
+        const outlines = [];
+        strokes.forEach(s => {
+          const outline = getStroke(s.points, {
+            size: s.size, thinning: s.thinning, smoothing: 0.5, streamline: 0.5, last: true
+          });
+          if (outline.length < 3) return;
+          outline.forEach(([x]) => {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+          });
+          outlines.push(outline);
+        });
+        if (!outlines.length) return;
+
+        // auto left-align
+        const shiftX = (isFinite(minX) ? minX : 0) - 8;
+
+        outlines.forEach(outline => {
+          const mapped = outline.map(([x, y]) => ({
+            x: (x - shiftX) * scale,
+            y: (baselineY - y) * scale
+          }));
+          fontPath.moveTo(mapped[0].x, mapped[0].y);
+          for (let i = 1; i < mapped.length; i++) {
+            fontPath.lineTo(mapped[i].x, mapped[i].y);
+          }
+          fontPath.close();
+        });
+
+        const width = Math.max(120, Math.round(((maxX - shiftX) + 24) * scale));
+        glyphs.push(new opentype.Glyph({
+          name: 'uni' + char.charCodeAt(0).toString(16).toUpperCase(),
+          unicode: char.charCodeAt(0),
+          advanceWidth: width,
+          path: fontPath
+        }));
+      });
+
+      const familyName = document.getElementById('fontName').value.trim() || 'MyHandwriting';
+      return new opentype.Font({
+        familyName,
+        styleName: 'Regular',
+        unitsPerEm,
+        ascender,
+        descender,
+        glyphs
+      });
+    }
+
+    function updateLiveFont() {
+      try {
+        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
+        if (!drawn.length) return;
+        const font = buildOpenTypeFont();
+        const arrayBuffer = font.toArrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: 'font/ttf' });
+        if (liveFontUrl) URL.revokeObjectURL(liveFontUrl);
+        liveFontUrl = URL.createObjectURL(blob);
+        let styleTag = document.getElementById('dynamic-font-style');
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = 'dynamic-font-style';
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = `@font-face { font-family: 'LiveCustomFont'; src: url('${liveFontUrl}'); }`;
+        livePreviewOutput.style.fontFamily = "'LiveCustomFont', Georgia, sans-serif";
+      } catch (err) {
+        console.error('Ошибка обновления шрифта:', err);
+      }
+    }
+
+    document.getElementById('downloadBtn').onclick = () => {
+      try {
+        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
+        if (!drawn.length) {
+          alert('Сначала нарисуйте хотя бы одну букву');
+          return;
+        }
+        const font = buildOpenTypeFont();
+        const name = (document.getElementById('fontName').value.trim() || 'MyHandwriting') + '.ttf';
+        font.download(name);
+      } catch (err) {
+        console.error(err);
+        alert('Не удалось собрать шрифт: ' + (err.message || err));
+      }
+    };
+
+    // init
+    loadProject();
+    renderGrid();
+    renderCanvas();
+    updateLiveFont();
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
