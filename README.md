@@ -48,15 +48,6 @@
 
 Сборка и сервер не нужны — достаточно открыть `index.html` или выложить на GitHub Pages.
 
-## 📤 Как выложить на GitHub Pages
-
-1. Создайте репозиторий `glyph-studio` (Public)
-2. Загрузите все файлы из этой папки
-3. **Settings → Pages → Branch: `main` → Folder: `/ (root)` → Save**
-4. Сайт будет здесь: `https://ВАШ_ЛОГИН.github.io/glyph-studio/`
-
-**Topics:** `font` `ttf` `handwriting` `opentype` `pwa` `cyrillic` `javascript` `glyph` `calligraphy`
-
 ## 🗺 Roadmap
 
 - [x] Рисование и экспорт TTF
