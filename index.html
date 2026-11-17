@@ -18,9 +18,24 @@
     html, body { height: 100%; }
     #drawSvg { touch-action: none; }
     .glyph-btn { min-height: 2.5rem; }
+    .canvas-box { width: 360px; aspect-ratio: 1 / 1; }
     @media (max-width: 1023px) {
-      .canvas-box { width: min(360px, 92vw) !important; height: min(360px, 92vw) !important; }
+      .canvas-box { width: min(360px, calc(92vw - 64px)) !important; }
     }
+    .tool-btn { width: 2.4rem; height: 2.4rem; display: flex; align-items: center; justify-content: center;
+      border-radius: .5rem; border: 1px solid transparent; color: #cbd5e1; }
+    .tool-btn:hover { background: #334155; }
+    .tool-btn.active { background: #4f46e5; color: #fff; border-color: #818cf8; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
+    .prop-in { width: 3.6rem; background: #1e293b; border: 1px solid #475569; border-radius: .375rem;
+      padding: .2rem .35rem; font-size: .72rem; color: #e2e8f0; }
+    .prop-in:focus { outline: none; border-color: #6366f1; }
+    .pbtn { background: #334155; border: 1px solid #475569; border-radius: .375rem; padding: .25rem .5rem;
+      font-size: .72rem; color: #e2e8f0; white-space: nowrap; }
+    .pbtn:hover { background: #475569; }
+    .pbtn:disabled { opacity: .35; pointer-events: none; }
+    .tab-btn { padding: .35rem .8rem; font-size: .8rem; border-radius: .5rem .5rem 0 0; background: #1e293b; color: #94a3b8; }
+    .tab-btn.active { background: #4f46e5; color: #fff; }
+    input[type=range] { accent-color: #6366f1; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
@@ -30,9 +45,9 @@
       <div class="w-9 h-9 bg-indigo-500 rounded-lg flex items-center justify-center font-bold text-lg shadow">Ф</div>
       <div>
         <h1 class="text-lg sm:text-xl font-bold tracking-tight leading-tight">GlyphStudio
-          <span class="text-[10px] font-normal text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded ml-1 align-middle">MVP</span>
+          <span class="text-[10px] font-normal text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded ml-1 align-middle">v2 · векторный редактор</span>
         </h1>
-        <p class="text-[11px] text-slate-400 hidden sm:block">Рукописный шрифт в браузере</p>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Рисуй, вставляй, редактируй — как в CorelDRAW</p>
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
@@ -47,9 +62,8 @@
   </header>
 
   <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6 max-w-7xl w-full mx-auto">
-
-    <!-- Glyph grid -->
-    <section class="lg:col-span-4 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col h-[420px] lg:h-[640px]">
+    <!-- Сетка символов -->
+    <section class="lg:col-span-3 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col h-[420px] lg:h-auto">
       <div class="flex items-center justify-between mb-3 gap-2">
         <h2 class="font-semibold text-slate-300">Символы</h2>
         <span id="progressText" class="text-xs text-slate-400">Готово: 0</span>
@@ -60,53 +74,127 @@
         <button type="button" data-set="num" class="set-btn text-xs px-2 py-1 rounded bg-slate-700">123</button>
         <button type="button" data-set="all" class="set-btn text-xs px-2 py-1 rounded bg-slate-700">Все</button>
       </div>
-      <div id="glyphGrid" class="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-6 gap-1.5 overflow-y-auto pr-1 flex-1 content-start"></div>
+      <div id="glyphGrid" class="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-5 gap-1.5 overflow-y-auto pr-1 flex-1 content-start"></div>
     </section>
 
-    <!-- Canvas -->
-    <section class="lg:col-span-5 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col items-center">
+    <!-- Редактор -->
+    <section class="lg:col-span-6 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col items-center">
       <div class="w-full flex items-center justify-between mb-2 gap-2 flex-wrap">
-        <div>
-          <span class="text-xs text-slate-400 uppercase tracking-wider">Редактирование</span>
-          <div id="currentCharLabel" class="text-2xl font-bold text-indigo-400">А</div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-400 uppercase tracking-wider">Редактор</span>
+          <div id="currentCharLabel" class="text-2xl font-bold text-indigo-400 leading-none">А</div>
         </div>
         <div class="flex gap-2 flex-wrap">
-          <button id="undoBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium">↩ Отменить</button>
-          <button id="clearBtn" class="bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 px-3 py-1.5 rounded-lg text-xs font-medium">Очистить</button>
+          <button id="undoBtn" class="pbtn" title="Отменить (Ctrl+Z)">↩ Назад</button>
+          <button id="redoBtn" class="pbtn" title="Вернуть (Ctrl+Y)">↪ Вперёд</button>
+          <button id="clearBtn" class="bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 px-3 py-1 rounded-lg text-xs font-medium" title="Очистить букву (можно отменить)">Очистить</button>
         </div>
       </div>
 
-      <div class="canvas-box relative w-[360px] h-[360px] bg-white rounded-xl shadow-inner overflow-hidden cursor-crosshair select-none border-2 border-slate-600">
-        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 360 360" aria-hidden="true">
-          <line x1="0" y1="70" x2="360" y2="70" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
-          <text x="8" y="65" fill="#94a3b8" font-size="10">Прописные</text>
-          <line x1="0" y1="145" x2="360" y2="145" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
-          <text x="8" y="140" fill="#94a3b8" font-size="10">Строчные</text>
-          <line x1="0" y1="270" x2="360" y2="270" stroke="#f43f5e" stroke-width="1.5" />
-          <text x="8" y="264" fill="#f43f5e" font-size="10" font-weight="bold">Базовая линия</text>
-          <line x1="0" y1="330" x2="360" y2="330" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1" />
-        </svg>
-        <svg id="drawSvg" class="relative z-10 w-full h-full" viewBox="0 0 360 360"></svg>
+      <!-- Панель свойств (как в Corel) -->
+      <div class="w-full bg-slate-900/70 border border-slate-700/60 rounded-lg px-2 py-1.5 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 min-h-[2.6rem]">
+        <button id="importBtn" class="pbtn !bg-indigo-600 !border-indigo-500 hover:!bg-indigo-500 font-medium" title="Вставить символ, PNG или SVG">📥 Вставить</button>
+        <span class="w-px h-5 bg-slate-700"></span>
+
+        <div id="propSelect" class="hidden flex flex-wrap items-center gap-1.5">
+          <label class="text-[10px] text-slate-500">X<input id="propX" type="number" class="prop-in ml-0.5"></label>
+          <label class="text-[10px] text-slate-500">Y<input id="propY" type="number" class="prop-in ml-0.5"></label>
+          <label class="text-[10px] text-slate-500">Ш<input id="propW" type="number" min="1" class="prop-in ml-0.5"></label>
+          <label class="text-[10px] text-slate-500">В<input id="propH" type="number" min="1" class="prop-in ml-0.5"></label>
+          <label class="text-[10px] text-slate-500">°<input id="propAngle" type="number" value="0" step="5" class="prop-in ml-0.5" title="Повернуть на угол"></label>
+          <button id="dupBtn" class="pbtn" title="Дублировать (Ctrl+D)">⧉</button>
+          <button id="flipHBtn" class="pbtn" title="Отразить по горизонтали">⇋</button>
+          <button id="flipVBtn" class="pbtn" title="Отразить по вертикали">⇅</button>
+          <button id="backBtn" class="pbtn" title="На задний план">⬇</button>
+          <button id="frontBtn" class="pbtn" title="На передний план">⬆</button>
+          <button id="delBtn" class="pbtn !text-rose-300" title="Удалить объект (Delete)">🗑</button>
+        </div>
+
+        <div id="propNode" class="hidden flex flex-wrap items-center gap-1.5">
+          <button id="addNodeBtn" class="pbtn" title="Добавить узел после выбранного">+ узел</button>
+          <button id="delNodeBtn" class="pbtn" title="Удалить выбранный узел (Delete)">− узел</button>
+          <button id="smoothBtn" class="pbtn" title="Угол / гладкий (двойной клик по узлу)">◇/◆</button>
+          <span class="text-[10px] text-slate-500">клик по линии — новый узел · тяни узлы и рычаги</span>
+        </div>
+
+        <div id="propBrush" class="hidden flex flex-wrap items-center gap-3">
+          <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Толщина
+            <input id="brushSize" type="range" min="4" max="40" value="16" class="w-24"><span id="sizeVal" class="text-slate-300 w-8">16px</span></label>
+          <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Заострение
+            <input id="brushThinning" type="range" min="0" max="0.9" step="0.1" value="0.6" class="w-20"><span id="thinningVal" class="text-slate-300 w-6">0.6</span></label>
+        </div>
+
+        <div id="propPen" class="hidden text-[10px] text-slate-500">
+          клик — узел · клик и тянуть — кривая · клик по первому узлу или Enter — замкнуть · Esc — отмена
+        </div>
+
+        <div id="propEraser" class="hidden flex items-center gap-2">
+          <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Размер ластика
+            <input id="eraserSize" type="range" min="4" max="60" value="18" class="w-28"><span id="eraserVal" class="text-slate-300 w-8">18px</span></label>
+        </div>
+
+        <div id="propHand" class="hidden text-[10px] text-slate-500">Перетаскивай, чтобы двигать холст. Колесо мыши — зум.</div>
+
+        <div class="flex items-center gap-1 ml-auto">
+          <button id="zoomOutBtn" class="pbtn" title="Уменьшить вид">−</button>
+          <span id="zoomVal" class="text-[10px] text-slate-400 w-9 text-center">100%</span>
+          <button id="zoomInBtn" class="pbtn" title="Увеличить вид">+</button>
+          <button id="zoomResetBtn" class="pbtn" title="Показать весь холст">⤢</button>
+        </div>
       </div>
 
-      <div class="w-full grid grid-cols-2 gap-4 mt-4 bg-slate-900/60 p-3 rounded-lg border border-slate-700/60">
-        <div>
-          <label class="flex justify-between text-xs text-slate-400 mb-1">
-            <span>Толщина пера</span><span id="sizeVal">16px</span>
-          </label>
-          <input id="brushSize" type="range" min="6" max="36" value="16" class="w-full accent-indigo-500" />
+      <!-- Панель инструментов + холст -->
+      <div class="flex gap-2 items-start">
+        <div id="toolbox" class="flex flex-col gap-1 bg-slate-900/70 border border-slate-700/60 rounded-lg p-1">
+          <button class="tool-btn" data-tool="select" title="Выбор / трансформация (V). Повторный клик по объекту — поворот и скос">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M5 2l9 8-5 .8 2.6 5.4-2.4 1.1-2.6-5.4L5 15z"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="node" title="Узлы (N): редактирование опорных точек и кривых">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 13c4-8 8-8 12 0" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="1.5" y="11.5" width="3.5" height="3.5" fill="currentColor"/><rect x="13" y="11.5" width="3.5" height="3.5" fill="currentColor"/><rect x="7.2" y="4.6" width="3.5" height="3.5" fill="currentColor"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="pen" title="Перо Безье (P): контур по точкам">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M9 2l6 6-7.5 7.5L3 17l1.5-4.5z"/><circle cx="9.3" cy="8.7" r="1.2" fill="#0f172a"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="brush" title="Кисть (B): рисование от руки">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M3 17c0-3 1.5-4.5 4-4l7-9 3 3-9 7c.5 2.5-1 4-5 3z"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="eraser" title="Ластик (E): режет контуры, размер регулируется">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M7 15.5L2.8 11.3a1.5 1.5 0 010-2.1L9 3a1.5 1.5 0 012.1 0l4.4 4.4a1.5 1.5 0 010 2.1l-5.5 6z" fill="currentColor"/><path d="M6 16.2h10" stroke="currentColor" stroke-width="1.5"/></svg>
+            </button>
+          <button class="tool-btn" data-tool="hand" title="Рука (H или пробел): панорама холста">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 9.5V4.2a1.1 1.1 0 012.2 0V8m0-4.6a1.1 1.1 0 012.2 0V8m0-3.4a1.1 1.1 0 012.2 0V9m0-2.2a1.1 1.1 0 012.2 0v5c0 3-1.8 5.2-4.8 5.2-2.6 0-3.9-1.2-5.2-3.6L3.4 10c-.6-1 .8-2 1.6-1.1L6 10.2"/></svg>
+          </button>
         </div>
-        <div>
-          <label class="flex justify-between text-xs text-slate-400 mb-1">
-            <span>Заострение</span><span id="thinningVal">0.6</span>
-          </label>
-          <input id="brushThinning" type="range" min="0" max="0.9" step="0.1" value="0.6" class="w-full accent-indigo-500" />
+
+        <div id="canvasBox" class="canvas-box relative bg-white rounded-xl shadow-inner overflow-hidden select-none border-2 border-slate-600">
+          <svg id="guideSvg" class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 360 360" aria-hidden="true">
+            <line x1="0" y1="70" x2="360" y2="70" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
+            <text x="8" y="65" fill="#94a3b8" font-size="10">Прописные</text>
+            <line x1="0" y1="145" x2="360" y2="145" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
+            <text x="8" y="140" fill="#94a3b8" font-size="10">Строчные</text>
+            <line x1="0" y1="270" x2="360" y2="270" stroke="#f43f5e" stroke-width="1.5"/>
+            <text x="8" y="264" fill="#f43f5e" font-size="10" font-weight="bold">Базовая линия</text>
+            <line x1="0" y1="330" x2="360" y2="330" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
+          </svg>
+          <svg id="drawSvg" class="relative z-10 w-full h-full" viewBox="0 0 360 360"></svg>
         </div>
       </div>
-      <p class="text-[11px] text-slate-500 mt-2 text-center">Рисуйте пальцем или мышью. Прогресс сохраняется автоматически.</p>
+
+      <p class="text-[11px] text-slate-500 mt-2 text-center">Кисть и перо дорисовывают в выделенный объект. Прогресс сохраняется автоматически.</p>
+      <details class="w-full mt-2 text-[11px] text-slate-400 bg-slate-900/50 rounded-lg border border-slate-700/50 px-3 py-2">
+        <summary class="cursor-pointer text-slate-300">❓ Подсказки и горячие клавиши</summary>
+        <div class="mt-2 grid sm:grid-cols-2 gap-x-4 gap-y-1">
+          <span><b>V</b> — выбор: тяни ручки = размер; клик по выделенному ещё раз = поворот (углы) и скос (боковые); <b>Alt</b>+угол = искажение; <b>Shift</b> = пропорции / шаг 15°</span>
+          <span><b>N</b> — узлы: тяни точки и рычаги; клик по линии = +узел; 2×клик по узлу = угол/гладкий; <b>Alt</b>+рычаг = излом</span>
+          <span><b>P</b> — перо, <b>B</b> — кисть, <b>E</b> — ластик, <b>H</b>/пробел — рука</span>
+          <span><b>Ctrl+Z</b>/<b>Ctrl+Y</b> — назад/вперёд, <b>Ctrl+D</b> — дубликат, <b>Delete</b> — удалить, стрелки — сдвиг (<b>Shift</b> ×10)</span>
+          <span>Колесо мыши — зум, <b>Esc</b> — снять выделение, <b>Ctrl+V</b> — вставить картинку из буфера</span>
+          <span>Можно перетащить PNG/SVG прямо на холст. Вставка символа даёт готовый редактируемый контур.</span>
+        </div>
+      </details>
     </section>
 
-    <!-- Preview -->
+    <!-- Предпросмотр -->
     <section class="lg:col-span-3 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col min-h-[280px]">
       <h2 class="font-semibold text-slate-300 mb-2">Проверка шрифта</h2>
       <p class="text-xs text-slate-400 mb-3">Нарисуйте буквы и введите слово:</p>
@@ -114,231 +202,1636 @@
         class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-indigo-500 mb-4"
         placeholder="Введите текст...">ПРИВЕТ</textarea>
       <div class="flex-1 bg-white rounded-xl p-4 text-slate-900 overflow-auto flex flex-col justify-center items-center border border-slate-600 min-h-[120px]">
-        <div id="livePreviewOutput" class="text-4xl sm:text-5xl break-all text-center leading-relaxed" style="font-family: 'LiveCustomFont', Georgia, sans-serif;">
-          ПРИВЕТ
-        </div>
+        <div id="livePreviewOutput" class="text-4xl sm:text-5xl break-all text-center leading-relaxed" style="font-family:'LiveCustomFont',Georgia,sans-serif;">ПРИВЕТ</div>
       </div>
       <p class="text-[11px] text-slate-400 mt-3 text-center">Ненарисованные буквы — обычным шрифтом.</p>
       <button id="clearAllBtn" class="mt-3 text-xs text-rose-400 hover:text-rose-300 underline">Очистить весь проект</button>
     </section>
   </main>
-
   <footer class="border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-500">
     GlyphStudio · рукописные шрифты в браузере · MIT
   </footer>
 
+  <!-- Модальное окно импорта -->
+  <div id="importModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg max-h-[92vh] overflow-y-auto p-4 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-slate-200">📥 Вставить в редактор</h3>
+        <button id="modalClose" class="pbtn">✕</button>
+      </div>
+      <div class="flex gap-1">
+        <button class="tab-btn active" data-tab="symbol">Символ</button>
+        <button class="tab-btn" data-tab="png">PNG / JPG</button>
+        <button class="tab-btn" data-tab="svg">SVG</button>
+      </div>
+      <div class="bg-slate-900/70 border border-slate-700 rounded-b-lg rounded-tr-lg p-3">
+
+        <div id="tabSymbol">
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-xs text-slate-400">Символ<br><input id="symChar" type="text" maxlength="2" class="prop-in !w-12 !text-lg text-center mt-1"></label>
+            <label class="text-xs text-slate-400">Шрифт<br>
+              <select id="symFamily" class="prop-in !w-44 mt-1"></select></label>
+            <label class="text-xs text-slate-400">Насыщ.<br>
+              <select id="symWeight" class="prop-in !w-20 mt-1"><option value="400">Обычн.</option><option value="700">Жирный</option></select></label>
+            <label class="text-xs text-slate-400 flex items-center gap-1 mb-1.5"><input id="symItalic" type="checkbox" class="accent-indigo-500">Курсив</label>
+          </div>
+          <div class="mt-2 flex items-center gap-2 flex-wrap">
+            <button id="symFontBtn" class="pbtn" title="Загрузить TTF/OTF и взять из него точный контур буквы">🔤 Загрузить шрифт TTF/OTF…</button>
+            <input id="symFontFile" type="file" accept=".ttf,.otf,.woff" class="hidden">
+            <span id="symFontName" class="text-[11px] text-emerald-400"></span>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">Из файла шрифта контур берётся точно, из системного шрифта — обводится автоматически.</p>
+        </div>
+
+        <div id="tabPng" class="hidden">
+          <input id="pngFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+            class="text-xs text-slate-400 file:bg-indigo-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1.5 file:mr-2 file:cursor-pointer">
+          <div class="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
+            <label class="text-[11px] text-slate-400">Порог: <span id="pngThrVal" class="text-slate-200">128</span>
+              <input id="pngThreshold" type="range" min="10" max="245" value="128" class="w-full"></label>
+            <label class="text-[11px] text-slate-400">Сглаживание: <span id="pngSmoothVal" class="text-slate-200">0.7</span>
+              <input id="pngSmooth" type="range" min="0" max="1.5" step="0.1" value="0.7" class="w-full"></label>
+            <label class="text-[11px] text-slate-400">Упрощение: <span id="pngSimpVal" class="text-slate-200">1.2</span>
+              <input id="pngSimplify" type="range" min="0.4" max="4" step="0.2" value="1.2" class="w-full"></label>
+            <label class="text-[11px] text-slate-400 flex items-center gap-1.5 mt-4"><input id="pngInvert" type="checkbox" class="accent-indigo-500">Инвертировать (светлое на тёмном)</label>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">Картинка обводится в вектор и становится редактируемым объектом. Можно также перетащить файл на холст или нажать Ctrl+V.</p>
+        </div>
+
+        <div id="tabSvg" class="hidden">
+          <input id="svgFile" type="file" accept=".svg,image/svg+xml"
+            class="text-xs text-slate-400 file:bg-indigo-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1.5 file:mr-2 file:cursor-pointer">
+          <textarea id="svgText" rows="3" placeholder="…или вставьте сюда код <svg>…</svg>"
+            class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg p-2 text-[11px] font-mono focus:outline-none focus:border-indigo-500"></textarea>
+          <div class="grid grid-cols-2 gap-x-4 mt-2">
+            <label class="text-[11px] text-slate-400">Упрощение: <span id="svgTolVal" class="text-slate-200">1.0</span>
+              <input id="svgTol" type="range" min="0.2" max="4" step="0.2" value="1" class="w-full"></label>
+            <label class="text-[11px] text-slate-400">Сглаживание: <span id="svgSmoothVal" class="text-slate-200">0.5</span>
+              <input id="svgSmooth" type="range" min="0" max="1.5" step="0.1" value="0.5" class="w-full"></label>
+          </div>
+        </div>
+
+        <div class="mt-3 bg-white rounded-lg overflow-hidden border border-slate-600">
+          <svg id="importPreview" viewBox="0 0 360 360" class="w-full h-52"></svg>
+        </div>
+        <div class="flex justify-end gap-2 mt-3">
+          <button id="cancelImportBtn" class="pbtn">Отмена</button>
+          <button id="insertBtn" class="pbtn !bg-indigo-600 !border-indigo-500 hover:!bg-indigo-500 font-medium px-4">Вставить в букву</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
-    import { getStroke } from 'https://cdn.skypack.dev/perfect-freehand@1.2.2';
-
-    const STORAGE_KEY = 'glyphstudio_project_v1';
+    /* ================= Геометрия и модель ================= */
     const SVG_NS = 'http://www.w3.org/2000/svg';
+    const KEY2 = 'glyphstudio_project_v2';
+    const KEY1 = 'glyphstudio_project_v1';
+    const F = n => Math.round(n * 10) / 10;
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const clone = o => JSON.parse(JSON.stringify(o));
 
+    function el(name, attrs) {
+      const n = document.createElementNS(SVG_NS, name);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    }
+    function cubicAt(p0, p1, p2, p3, t) {
+      const u = 1 - t;
+      return {
+        x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
+        y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y
+      };
+    }
+    function segCtrl(a, b) {
+      if (!a.hOut && !b.hIn) return null;
+      return [a.hOut  { x: a.x, y: a.y }, b.hIn  { x: b.x, y: b.y }];
+    }
+    function flattenContour(c, step = 3) {
+      const ns = c.nodes, n = ns.length, pts = [];
+      if (n < 2) return pts;
+      pts.push({ x: ns[0].x, y: ns[0].y, seg: 0, t: 0 });
+      for (let i = 0; i < n; i++) {
+        const a = ns[i], b = ns[(i + 1) % n];
+        const A = { x: a.x, y: a.y }, B = { x: b.x, y: b.y };
+        const cv = segCtrl(a, b);
+        if (cv) {
+          const L = dist(A, cv[0]) + dist(cv[0], cv[1]) + dist(cv[1], B);
+          const k = Math.max(4, Math.min(40, Math.ceil(L / step)));
+          for (let j = 1; j <= k; j++) {
+            const p = cubicAt(A, cv[0], cv[1], B, j / k);
+            pts.push({ x: p.x, y: p.y, seg: i, t: j / k });
+          }
+        } else pts.push({ x: B.x, y: B.y, seg: (i + 1) % n, t: 0 });
+      }
+      pts.pop();
+      return pts;
+    }
+    function areaOf(pts) {
+      let s = 0;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++)
+        s += pts[j].x * pts[i].y - pts[i].x * pts[j].y;
+      return s / 2;
+    }
+    function pointInPoly(p, pts) {
+      let ins = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const a = pts[i], b = pts[j];
+        if ((a.y > p.y) !== (b.y > p.y) &&
+            p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) ins = !ins;
+      }
+      return ins;
+    }
+    function windingAt(p, pts) {
+      let w = 0;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const a = pts[j], b = pts[i];
+        const cr = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+        if (a.y <= p.y) { if (b.y > p.y && cr > 0) w++; }
+        else { if (b.y <= p.y && cr < 0) w--; }
+      }
+      return w;
+    }
+    function reverseContour(c) {
+      c.nodes.reverse();
+      for (const n of c.nodes) { const t = n.hIn; n.hIn = n.hOut; n.hOut = t; }
+    }
+    function normalizeContours(contours, outerSign = 1) {
+      const flats = contours.map(c => flattenContour(c, 5));
+      for (let i = 0; i < contours.length; i++) {
+        if (flats[i].length < 3) continue;
+        let depth = 0;
+        for (let j = 0; j < contours.length; j++)
+          if (j !== i && flats[j].length > 2 && pointInPoly(flats[i][0], flats[j])) depth++;
+        const want = (depth % 2 === 0) ? outerSign : -outerSign;
+        const a = areaOf(flats[i]);
+        if (a !== 0 && Math.sign(a) !== want) reverseContour(contours[i]);
+      }
+    }
+    function contourD(c) {
+      const ns = c.nodes, n = ns.length;
+      if (n < 2) return '';
+      let d = M ${F(ns[0].x)} ${F(ns[0].y)};
+      for (let i = 0; i < n; i++) {
+        const a = ns[i], b = ns[(i + 1) % n];
+        const cv = segCtrl(a, b);
+        if (cv) d +=  C ${F(cv[0].x)} ${F(cv[0].y)} ${F(cv[1].x)} ${F(cv[1].y)} ${F(b.x)} ${F(b.y)};
+        else d +=  L ${F(b.x)} ${F(b.y)};
+      }
+      return d + ' Z';
+    }
+    const contoursD = cs => cs.map(contourD).join(' ');
+    function bboxOf(cs) {
+      let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+      for (const c of cs) for (const p of flattenContour(c, 4)) {
+        if (p.x < x1) x1 = p.x; if (p.x > x2) x2 = p.x;
+        if (p.y < y1) y1 = p.y; if (p.y > y2) y2 = p.y;
+      }
+      if (x1 > x2) return null;
+      return { x: x1, y: y1, x2, y2, w: Math.max(x2 - x1, .001), h: Math.max(y2 - y1, .001), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 };
+    }
+    function mapNode(n, f) {
+      const p = f({ x: n.x, y: n.y });
+      return { x: p.x, y: p.y, smooth: n.smooth, hIn: n.hIn ? f(n.hIn) : null, hOut: n.hOut ? f(n.hOut) : null };
+    }
+    const mapContours = (cs, f) => cs.map(c => ({ nodes: c.nodes.map(n => mapNode(n, f)) }));
+    const mT = (tx, ty) => [1, 0, 0, 1, tx, ty];
+    const mR = a => [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 0, 0];
+    function mMul(A, B) {
+      return [
+        A[0]*B[0] + A[2]*B[1], A[1]*B[0] + A[3]*B[1],
+        A[0]*B[2] + A[2]*B[3], A[1]*B[2] + A[3]*B[3],
+        A[0]*B[4] + A[2]*B[5] + A[4], A[1]*B[4] + A[3]*B[5] + A[5]
+      ];
+    }
+    const mApply = (m, p) => ({ x: m[0]*p.x + m[2]*p.y + m[4], y: m[1]*p.x + m[3]*p.y + m[5] });
+    const around = (c, M) => mMul(mT(c.x, c.y), mMul(M, mT(-c.x, -c.y)));
+
+    function perpDist(p, a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const L = Math.hypot(dx, dy);
+      if (L < 1e-9) return dist(p, a);
+      return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / L;
+    }
+    function rdp(pts, eps) {
+      if (pts.length < 3) return pts.slice();
+      let dmax = 0, idx = 0;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const d = perpDist(pts[i], pts[0], pts[pts.length - 1]);
+        if (d > dmax) { dmax = d; idx = i; }
+      }
+      if (dmax > eps) {
+        const l = rdp(pts.slice(0, idx + 1), eps), r = rdp(pts.slice(idx), eps);
+        return l.slice(0, -1).concat(r);
+      }
+      return [pts[0], pts[pts.length - 1]];
+    }
+    function simplifyClosed(pts, eps) {
+      if (pts.length < 5) return pts;
+      let far = 1, fd = -1;
+      for (let i = 1; i < pts.length; i++) {
+        const d = dist(pts[i], pts[0]);
+        if (d > fd) { fd = d; far = i; }
+      }
+      const s1 = rdp(pts.slice(0, far + 1), eps);
+      const s2 = rdp(pts.slice(far).concat([pts[0]]), eps);
+      return s1.slice(0, -1).concat(s2.slice(0, -1));
+    }
+    function smoothNodes(pts, f) {
+      const n = pts.length, k = f / 4;
+      return pts.map((p, i) => {
+        const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
+        if (f <= 0 || n < 3) return { x: F(p.x), y: F(p.y), hIn: null, hOut: null, smooth: false };
+        const tx = (next.x - prev.x) * k, ty = (next.y - prev.y) * k;
+        return { x: F(p.x), y: F(p.y), smooth: true,
+          hIn: { x: F(p.x - tx), y: F(p.y - ty) }, hOut: { x: F(p.x + tx), y: F(p.y + ty) } };
+      });
+    }
+    function ribbonPoly(pts, w) {
+      const n = pts.length;
+      if (n < 2) return [];
+      const L = [], R = [];
+      for (let i = 0; i < n; i++) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const l = Math.hypot(dx, dy) || 1;
+        const nx = -dy / l * w / 2, ny = dx / l * w / 2;
+        L.push({ x: pts[i].x + nx, y: pts[i].y + ny });
+        R.push({ x: pts[i].x - nx, y: pts[i].y - ny });
+      }
+      return L.concat(R.reverse());
+    }
+    function outlineToContour(outline) {
+      const n = outline.length, nodes = [];
+      for (let i = 0; i < n; i++) {
+        const p = outline[i], q = outline[(i + 1) % n];
+        const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+        nodes.push({ x: F(mx), y: F(my), smooth: true,
+          hOut: { x: F(mx + (q[0] - mx) * 2 / 3), y: F(my + (q[1] - my) * 2 / 3) },
+          hIn:  { x: F(mx + (p[0] - mx) * 2 / 3), y: F(my + (p[1] - my) * 2 / 3) } });
+      }
+      return { nodes };
+    }
+
+    /* ================= Трассировка растра (marching squares) ================= */
+    function traceBinary(v, w, h) {
+      const segs = new Map();
+      const key = (x, y) => x + '_' + y;
+      const add = (a, b) => {
+        const k = key(a[0], a[1]);
+        if (!segs.has(k)) segs.set(k, []);
+        segs.get(k).push(b);
+      };
+      const V = (x, y) => (x < 0  y < 0  x >= w || y >= h) ? 0 : v[y * w + x];
+      for (let y = -1; y < h; y++) for (let x = -1; x < w; x++) {
+        const idx = V(x, y) * 8 + V(x + 1, y) * 4 + V(x + 1, y + 1) * 2 + V(x, y + 1);
+        if (idx === 0 || idx === 15) continue;
+        const N = [x + .5, y], E = [x + 1, y + .5], S = [x + .5, y + 1], W = [x, y + .5];
+        switch (idx) {
+          case 1: add(S, W); break;
+          case 2: add(E, S); break;
+          case 3: add(E, W); break;
+          case 4: add(N, E); break;
+          case 5: add(N, E); add(S, W); break;
+          case 6: add(N, S); break;
+          case 7: add(N, W); break;
+          case 8: add(W, N); break;
+          case 9: add(S, N); break;
+          case 10: add(W, N); add(E, S); break;
+          case 11: add(E, N); break;
+          case 12: add(W, E); break;
+          case 13: add(S, E); break;
+          case 14: add(W, S); break;
+        }
+      }
+      const loops = [];
+      for (const [k, list] of segs) {
+        while (list.length) {
+          const start = k.split('_').map(Number);
+          const loop = [start];
+          let nxt = list.pop(), guard = 2000000, ok = false;
+          while (guard--) {
+            loop.push(nxt);
+            const nk = key(nxt[0], nxt[1]);
+            if (nk === k) { ok = true; break; }
+            const l2 = segs.get(nk);
+            if (!l2 || !l2.length) break;
+            nxt = l2.pop();
+          }
+          if (ok && loop.length > 3) { loop.pop(); loops.push(loop.map(p => ({ x: p[0], y: p[1] }))); }
+        }
+      }
+      return loops;
+    }
+    function bitmapLoops(data, w, h, thr, invert) {
+      const v = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        const a = data[i * 4 + 3];
+        const lum = .299 * data[i * 4] + .587 * data[i * 4 + 1] + .114 * data[i * 4 + 2];
+        let ink = a >= 128 && lum < thr;
+        if (invert) ink = a >= 128 && lum >= thr;
+        v[i] = ink ? 1 : 0;
+      }
+      return traceBinary(v, w, h);
+    }
+    function fitLoops(loops, maxW, maxH, bottom, cx) {
+      let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+      for (const lp of loops) for (const p of lp) {
+        if (p.x < x1) x1 = p.x; if (p.x > x2) x2 = p.x;
+        if (p.y < y1) y1 = p.y; if (p.y > y2) y2 = p.y;
+      }
+      if (x1 > x2) return null;
+      const s = Math.min(maxW / Math.max(x2 - x1, .001), maxH / Math.max(y2 - y1, .001));
+      const bcx = (x1 + x2) / 2;
+      const f = p => ({ x: cx + (p.x - bcx) * s, y: bottom - (y2 - p.y) * s });
+      return { loops: loops.map(lp => lp.map(f)), s };
+    }
+    function loopsToContours(loops, tol, smoothF) {
+      const cs = [];
+      for (const lp of loops) {
+        const simp = simplifyClosed(lp, tol);
+        if (simp.length < 3) continue;
+        const c = { nodes: smoothNodes(simp, smoothF) };
+        if (Math.abs(areaOf(flattenContour(c, 4))) < 4) continue;
+        cs.push(c);
+      }
+      return cs;
+    }
+
+    /* ================= Кисть (perfect-freehand c запасным вариантом) ================= */
+    let getStroke = null;
+    for (const url of [
+      'https://cdn.jsdelivr.net/npm/perfect-freehand@1.2.2/+esm',
+      'https://cdn.skypack.dev/perfect-freehand@1.2.2'
+    ]) {
+      try { const m = await import(url); if (m && m.getStroke) { getStroke = m.getStroke; break; } } catch (e) {}
+    }
+    if (!getStroke) getStroke = (pts, o) =>
+      ribbonPoly(pts.map(p => ({ x: p[0], y: p[1] })), (o && o.size) || 12).map(p => [p.x, p.y]);
+    const strokeOutline = pts => getStroke(pts, {
+      size: Number(brushSize.value), thinning: Number(brushThinning.value),
+      smoothing: .5, streamline: .5, last: true
+    });
+
+    /* ================= Состояние ================= */
     const SETS = {
       cyr: [...'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'],
       lat: [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'],
       num: [...'0123456789!?.,-:;()«»'],
     };
     SETS.all = [...SETS.cyr, ...SETS.lat, ...SETS.num];
-
     let visibleChars = SETS.cyr;
     const glyphData = {};
     let currentChar = 'А';
-    let currentPoints = [];
-    let isDrawing = false;
-    let liveFontUrl = null;
+    let tool = 'brush';
+    let view = { x: 0, y: 0, w: 360 };
+    let sel = null, selMode = 'scale', selNode = null;
+    let gesture = null, brushPts = null, spaceDown = false;
+    let pen = { nodes: [], cursor: null, dragging: false, dragNode: null };
+    let eraserR = 18, eraserPos = null, eraseChanged = false;
+    let liveFontUrl = null, modalOpen = false;
+    const histories = {};
+    let lastTap = { t: 0, x: 0, y: 0 };
 
-    const glyphGrid = document.getElementById('glyphGrid');
-    const drawSvg = document.getElementById('drawSvg');
-    const currentCharLabel = document.getElementById('currentCharLabel');
-    const brushSizeInput = document.getElementById('brushSize');
-    const brushThinningInput = document.getElementById('brushThinning');
-    const sizeVal = document.getElementById('sizeVal');
-    const thinningVal = document.getElementById('thinningVal');
-    const previewInput = document.getElementById('previewInput');
-    const livePreviewOutput = document.getElementById('livePreviewOutput');
-    const progressText = document.getElementById('progressText');
+    const $ = id => document.getElementById(id);
+    const glyphGrid = $('glyphGrid'), drawSvg = $('drawSvg'), guideSvg = $('guideSvg');
+    const brushSize = $('brushSize'), brushThinning = $('brushThinning');
+    const previewInput = $('previewInput'), livePreviewOutput = $('livePreviewOutput');
 
+    const objs = () => (glyphData[currentChar] || (glyphData[currentChar] = []));
+    const getObj = () => objs().find(o => o.id === sel) || null;
+    const hist = () => (histories[currentChar] || (histories[currentChar] = { u: [], r: [] }));
+    const snap = () => clone(glyphData[currentChar] || []);
+
+    function afterCommit() {
+      for (const o of objs()) normalizeContours(o.contours, 1);
+      if (sel && !getObj()) { sel = null; selNode = null; }
+      saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
+    }
+    function commitFromSnap(s) {
+      const h = hist();
+      h.u.push(s); if (h.u.length > 60) h.u.shift();
+      h.r = [];
+      afterCommit();
+    }
+    function commit(fn) { const s = snap(); fn(); commitFromSnap(s); }
+    function restore(s) {
+      glyphData[currentChar] = s;
+      selNode = null; pen.nodes = [];
+      if (sel && !getObj()) sel = null;
+    }
+    function undo() {
+      const h = hist(); if (!h.u.length) return;
+      h.r.push(snap()); restore(h.u.pop()); afterCommit();
+    }
+    function redo() {
+      const h = hist(); if (!h.r.length) return;
+      h.u.push(snap()); restore(h.r.pop()); afterCommit();
+    }
+
+    /* ================= Хранилище (со старого формата — автоматом) ================= */
     function loadProject() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (data.glyphs) Object.assign(glyphData, data.glyphs);
-        if (data.fontName) document.getElementById('fontName').value = data.fontName;
-      } catch (e) {}
+        const raw2 = localStorage.getItem(KEY2);
+        if (raw2) {
+          const d = JSON.parse(raw2);
+          if (d.glyphs) Object.assign(glyphData, d.glyphs);
+          if (d.fontName) $('fontName').value = d.fontName;
+          return;
+        }
+        const raw1 = localStorage.getItem(KEY1);
+        if (!raw1) return;
+        const d = JSON.parse(raw1);
+        if (d.fontName) $('fontName').value = d.fontName;
+        if (d.glyphs) for (const ch in d.glyphs) {
+          const strokes = d.glyphs[ch];
+          if (!Array.isArray(strokes) || !strokes.length) continue;
+          const contours = [];
+          for (const s of strokes) {
+            if (!s.points) continue;
+            const out = getStroke(s.points, { size: s.size, thinning: s.thinning, smoothing: .5, streamline: .5, last: true });
+            if (out.length >= 3) contours.push(outlineToContour(out));
+          }
+          if (contours.length) glyphData[ch] = [{ id: uid(), contours }];
+        }
+        saveProject();
+      } catch (e) { console.warn('load', e); }
     }
-
+    let quotaWarned = false;
     function saveProject() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          fontName: document.getElementById('fontName').value,
-          glyphs: glyphData,
-          savedAt: new Date().toISOString()
+        localStorage.setItem(KEY2, JSON.stringify({
+          fontName: $('fontName').value, glyphs: glyphData, savedAt: new Date().toISOString()
         }));
-      } catch (e) {}
+      } catch (e) {
+        if (!quotaWarned) { quotaWarned = true; alert('Хранилище браузера переполнено — скачайте TTF, чтобы не потерять работу.'); }
+      }
     }
 
-    function getSvgPathFromStroke(stroke) {
-      if (!stroke.length) return '';
-      const d = stroke.reduce((acc, [x0, y0], i, arr) => {
-        const [x1, y1] = arr[(i + 1) % arr.length];
-        acc.push(x0.toFixed(1), y0.toFixed(1), ((x0 + x1) / 2).toFixed(1), ((y0 + y1) / 2).toFixed(1));
-        return acc;
-      }, ['M', ...stroke[0].map(n => n.toFixed(1)), 'Q']);
-      d.push('Z');
-      return d.join(' ');
+    /* ================= Вид (зум/панорама) ================= */
+    function setViewBox() {
+      const vb = ${view.x} ${view.y} ${view.w} ${view.w};
+      drawSvg.setAttribute('viewBox', vb);
+      guideSvg.setAttribute('viewBox', vb);
+      $('zoomVal').textContent = Math.round(360 / view.w * 100) + '%';
+    }
+    function zoomAt(factor, c) {
+      const w2 = Math.min(1440, Math.max(80, view.w * factor));
+      const f = w2 / view.w;
+      view.x = c.x - (c.x - view.x) * f;
+      view.y = c.y - (c.y - view.y) * f;
+      view.w = w2;
+      setViewBox(); renderCanvas();
+    }
+    function pos(e) {
+      const r = drawSvg.getBoundingClientRect();
+      return {
+        x: view.x + (e.clientX - r.left) / r.width * view.w,
+        y: view.y + (e.clientY - r.top) / r.height * view.w,
+        pressure: (typeof e.pressure === 'number' && e.pressure > 0) ? e.pressure : .5
+      };
     }
 
+    /* ================= Отрисовка ================= */
+    function displayContours(o) {
+      if (!gesture || gesture.objId !== o.id) return o.contours;
+      if (gesture.type === 'transform' && gesture.map) return mapContours(o.contours, gesture.map);
+      if (gesture.type === 'node' && gesture.moved) {
+        const d = gesture.delta;
+        return o.contours.map((c, ci) => ({ nodes: c.nodes.map((n, ni) =>
+          (ci === gesture.ci && ni === gesture.ni)
+            ? { x: n.x + d.x, y: n.y + d.y, smooth: n.smooth,
+                hIn: n.hIn ? { x: n.hIn.x + d.x, y: n.hIn.y + d.y } : null,
+                hOut: n.hOut ? { x: n.hOut.x + d.x, y: n.hOut.y + d.y } : null }
+            : n) }));
+      }
+      if (gesture.type === 'handle' && gesture.pos) {
+        return o.contours.map((c, ci) => ({ nodes: c.nodes.map((n, ni) => {
+          if (ci !== gesture.ci || ni !== gesture.ni) return n;
+          const cp = clone(n); cp[gesture.which] = { x: gesture.pos.x, y: gesture.pos.y };
+          return cp;
+        }) }));
+      }
+      return o.contours;
+    }
+    function renderCanvas() {
+      drawSvg.innerHTML = '';
+      const k = view.w / 360;
+      for (const o of objs()) {
+        drawSvg.appendChild(el('path', { d: contoursD(displayContours(o)), fill: '#0f172a', 'fill-rule': 'nonzero' }));
+      }
+      if (brushPts && brushPts.length) {
+        const out = strokeOutline(brushPts);
+        if (out.length >= 3) drawSvg.appendChild(el('path', { d: contourD(outlineToContour(out)), fill: '#4f46e5' }));
+      }
+      const ov = el('g', { 'pointer-events': 'none' });
+      drawSvg.appendChild(ov);
+      if (tool === 'pen' && pen.nodes.length) {
+        const ns = pen.nodes;
+        let dOpen = M ${F(ns[0].x)} ${F(ns[0].y)};
+        for (let i = 1; i < ns.length; i++) {
+          const a = ns[i - 1], b = ns[i], cv = segCtrl(a, b);
+          dOpen += cv ?  C ${F(cv[0].x)} ${F(cv[0].y)} ${F(cv[1].x)} ${F(cv[1].y)} ${F(b.x)} ${F(b.y)} :  L ${F(b.x)} ${F(b.y)};
+        }
+        let dRub = '';
+        if (pen.cursor && !pen.dragging) {
+          const a = ns[ns.length - 1];
+          dRub = a.hOut
+            ?  M ${F(a.x)} ${F(a.y)} C ${F(a.hOut.x)} ${F(a.hOut.y)} ${F(pen.cursor.x)} ${F(pen.cursor.y)} ${F(pen.cursor.x)} ${F(pen.cursor.y)}
+            :  M ${F(a.x)} ${F(a.y)} L ${F(pen.cursor.x)} ${F(pen.cursor.y)};
+        }
+        ov.appendChild(el('path', { d: dOpen + ' Z', fill: 'rgba(99,102,241,.15)', stroke: 'none' }));
+        ov.appendChild(el('path', { d: dOpen + dRub, fill: 'none', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
+        ns.forEach((n, i) => ov.appendChild(el('rect', {
+          x: n.x - 3.5 * k, y: n.y - 3.5 * k, width: 7 * k, height: 7 * k,
+          fill: i === 0 ? '#4f46e5' : '#fff', stroke: '#4f46e5', 'stroke-width': 1.2 * k
+        })));
+      }
+      const so = getObj();
+      if (tool === 'select' && so) {
+        const bb = bboxOf(displayContours(so));
+        if (bb) {
+          ov.appendChild(el('rect', { x: bb.x, y: bb.y, width: bb.w, height: bb.h, fill: 'none',
+            stroke: '#6366f1', 'stroke-width': 1.1 * k, 'stroke-dasharray': ${5 * k} ${4 * k} }));
+          for (const [name, hx, hy] of handlePts(bb)) {
+            if (selMode === 'scale') {
+              ov.appendChild(el('rect', { x: hx - 4.5 * k, y: hy - 4.5 * k, width: 9 * k, height: 9 * k,
+                fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
+            } else if (name.length === 2) {
+              ov.appendChild(el('circle', { cx: hx, cy: hy, r: 5.5 * k, fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
+              ov.appendChild(el('path', { d: M ${hx - 2.5 * k} ${hy} A ${2.5 * k} ${2.5 * k} 0 1 1 ${hx} ${hy + 2.5 * k},
+                fill: 'none', stroke: '#4f46e5', 'stroke-width': 1.1 * k }));
+            } else {
+              ov.appendChild(el('path', { d: M ${hx} ${hy - 5.5 * k} L ${hx + 5.5 * k} ${hy} L ${hx} ${hy + 5.5 * k} L ${hx - 5.5 * k} ${hy} Z,
+                fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
+            }
+          }
+          if (selMode === 'rotate') {
+            ov.appendChild(el('circle', { cx: bb.cx, cy: bb.cy, r: 3 * k, fill: '#4f46e5' }));
+            ov.appendChild(el('path', { d: M ${bb.cx - 7 * k} ${bb.cy} H ${bb.cx + 7 * k} M ${bb.cx} ${bb.cy - 7 * k} V ${bb.cy + 7 * k},
+              stroke: '#4f46e5', 'stroke-width': 1 * k, fill: 'none' }));
+          }
+        }
+      }
+      if (tool === 'node' && so) {
+        const cs = displayContours(so);
+        cs.forEach((c, ci) => {
+          ov.appendChild(el('path', { d: contourD(c), fill: 'none', stroke: '#818cf8', 'stroke-width': .9 * k }));
+          c.nodes.forEach((n, ni) => {
+            const active = selNode && selNode.ci === ci && selNode.ni === ni;
+            if (active) {
+              for (const w of ['hIn', 'hOut']) if (n[w]) {
+                ov.appendChild(el('line', { x1: n.x, y1: n.y, x2: n[w].x, y2: n[w].y, stroke: '#94a3b8', 'stroke-width': .9 * k }));
+                ov.appendChild(el('circle', { cx: n[w].x, cy: n[w].y, r: 4 * k, fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.2 * k }));
+              }
+            }
+            ov.appendChild(el('rect', { x: n.x - 3.2 * k, y: n.y - 3.2 * k, width: 6.4 * k, height: 6.4 * k,
+              fill: active ? '#4f46e5' : (n.smooth ? '#fff' : '#e0e7ff'),
+              stroke: '#4f46e5', 'stroke-width': 1.1 * k,
+              transform: n.smooth ? '' : rotate(45 ${n.x} ${n.y}) }));
+          });
+        });
+      }
+      if (tool === 'eraser' && eraserPos) {
+        ov.appendChild(el('circle', { cx: eraserPos.x, cy: eraserPos.y, r: eraserR,
+          fill: 'rgba(244,63,94,.08)', stroke: '#f43f5e', 'stroke-width': 1.2 * k }));
+      }
+    }
+
+    /* ================= Сетка символов ================= */
     function renderGrid() {
       glyphGrid.innerHTML = '';
       let completed = 0;
-      const all = SETS.all;
-      all.forEach(ch => {
-        if (glyphData[ch] && glyphData[ch].length) completed++;
-      });
-      progressText.textContent = `Готово: ${completed} / ${all.length}`;
-
-      visibleChars.forEach(char => {
+      for (const ch of SETS.all) if (glyphData[ch] && glyphData[ch].length) completed++;
+      $('progressText').textContent = Готово: ${completed} / ${SETS.all.length};
+      for (const char of visibleChars) {
         const has = glyphData[char] && glyphData[char].length > 0;
         const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = char;
-        btn.className = `glyph-btn rounded-lg font-medium text-sm transition flex items-center justify-center border ${
-          char === currentChar
-            ? 'bg-indigo-600 border-indigo-400 text-white shadow-md'
-            : has
-              ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/60'
-              : 'bg-slate-900/70 border-slate-700 text-slate-400 hover:bg-slate-700'
-        }`;
+        btn.type = 'button'; btn.textContent = char;
+        btn.className = glyph-btn rounded-lg font-medium text-sm transition flex items-center justify-center border ${
+          char === currentChar ? 'bg-indigo-600 border-indigo-400 text-white shadow-md'
+          : has ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/60'
+          : 'bg-slate-900/70 border-slate-700 text-slate-400 hover:bg-slate-700'};
         btn.onclick = () => selectChar(char);
         glyphGrid.appendChild(btn);
-      });
+      }
     }
-
     function selectChar(char) {
       currentChar = char;
-      currentCharLabel.textContent = char;
-      currentPoints = [];
-      isDrawing = false;
-      renderGrid();
+      $('currentCharLabel').textContent = char;
+      sel = null; selNode = null; gesture = null; brushPts = null; pen.nodes = [];
+      renderGrid(); renderCanvas(); updateProps();
+    }
+
+    /* ================= Попадания и ручки ================= */
+    function handlePts(bb) {
+      return [['nw', bb.x, bb.y], ['n', bb.cx, bb.y], ['ne', bb.x2, bb.y], ['e', bb.x2, bb.cy],
+              ['se', bb.x2, bb.y2], ['s', bb.cx, bb.y2], ['sw', bb.x, bb.y2], ['w', bb.x, bb.cy]];
+    }
+    function hitHandle(p, bb, k) {
+      for (const [name, hx, hy] of handlePts(bb))
+        if (Math.abs(p.x - hx) < 8 * k && Math.abs(p.y - hy) < 8 * k) return name;
+      return null;
+    }
+    function hitObject(p, k) {
+      const list = objs();
+      for (let i = list.length - 1; i >= 0; i--) {
+        let w = 0, near = false;
+        for (const c of list[i].contours) {
+          const f = flattenContour(c, 3);
+          w += windingAt(p, f);
+          if (!near) for (const q of f)
+            if ((q.x - p.x)  2 + (q.y - p.y)  2 < (3.5 * k) ** 2) { near = true; break; }
+        }
+        if (w !== 0 || near) return list[i];
+      }
+      return null;
+    }
+    function hitNode(o, p, r) {
+      for (let ci = 0; ci < o.contours.length; ci++) {
+        const ns = o.contours[ci].nodes;
+        for (let ni = 0; ni < ns.length; ni++)
+          if (Math.abs(p.x - ns[ni].x) < r && Math.abs(p.y - ns[ni].y) < r) return { ci, ni };
+      }
+      return null;
+    }
+    function hitSegment(o, p, tol) {
+      let best = null, bd = tol * tol;
+      o.contours.forEach((c, ci) => {
+        for (const q of flattenContour(c, 2.5)) {
+          const d = (q.x - p.x)  2 + (q.y - p.y)  2;
+          if (d < bd) { bd = d; best = { ci, seg: q.seg, t: q.t }; }
+        }
+      });
+      return best;
+    }
+    function insertNodeAt(o, at) {
+      const c = o.contours[at.ci], ns = c.nodes, len = ns.length;
+      const a = ns[at.seg], b = ns[(at.seg + 1) % len], t = at.t;
+      const cv = segCtrl(a, b);
+      let nn;
+      if (cv) {
+        const p0 = { x: a.x, y: a.y }, p3 = { x: b.x, y: b.y };
+        const p01 = lerp(p0, cv[0], t), p12 = lerp(cv[0], cv[1], t), p23 = lerp(cv[1], p3, t);
+        const p012 = lerp(p01, p12, t), p123 = lerp(p12, p23, t), m = lerp(p012, p123, t);
+        a.hOut = { x: F(p01.x), y: F(p01.y) };
+        b.hIn = { x: F(p23.x), y: F(p23.y) };
+        nn = { x: F(m.x), y: F(m.y), smooth: true,
+          hIn: { x: F(p012.x), y: F(p012.y) }, hOut: { x: F(p123.x), y: F(p123.y) } };
+      } else {
+        const m = lerp(a, b, t);
+        nn = { x: F(m.x), y: F(m.y), smooth: false, hIn: null, hOut: null };
+      }
+      ns.splice(at.seg + 1, 0, nn);
+      return { ci: at.ci, ni: at.seg + 1 };
+    }
+
+    /* ================= Жесты ================= */
+    function transformGesture(o, fn) {
+      return { type: 'transform', snap: snap(), objId: o.id, map: null, moved: false,
+        upd(p, e) { this.map = fn(p, e); this.moved = true; },
+        fin() {
+          if (!this.moved || !this.map) return;
+          const ob = objs().find(x => x.id === this.objId);
+          if (!ob) return;
+          ob.contours = mapContours(ob.contours, this.map);
+          sel = ob.id;
+          commitFromSnap(this.snap);
+        } };
+    }
+    const clampAbs = (v, m) => Math.abs(v) < m ? (v < 0 ? -m : m) : v;
+    function makeScale(o, bb, h, p0) {
+      const ax = h.includes('w') ? bb.x2 : h.includes('e') ? bb.x : bb.cx;
+      const ay = h.includes('n') ? bb.y2 : h.includes('s') ? bb.y : bb.cy;
+      const axisX = h.length === 2  h === 'e'  h === 'w';
+      const axisY = h.length === 2  h === 'n'  h === 's';
+      const s0x = p0.x - ax  .001, s0y = p0.y - ay  .001;
+      return transformGesture(o, (p, e) => {
+        let sx = axisX ? (p.x - ax) / s0x : 1;
+        let sy = axisY ? (p.y - ay) / s0y : 1;
+        if (e.shiftKey && axisX && axisY) {
+          const m = Math.max(Math.abs(sx), Math.abs(sy));
+          sx = m * (sx < 0 ? -1 : 1); sy = m * (sy < 0 ? -1 : 1);
+        }
+        sx = clampAbs(sx, .02); sy = clampAbs(sy, .02);
+        return q => ({ x: ax + (q.x - ax) * sx, y: ay + (q.y - ay) * sy });
+      });
+    }
+    function makeRotate(o, bb, p0) {
+      const c = { x: bb.cx, y: bb.cy }, a0 = Math.atan2(p0.y - c.y, p0.x - c.x);
+      return transformGesture(o, (p, e) => {
+        let d = Math.atan2(p.y - c.y, p.x - c.x) - a0;
+        if (e.shiftKey) d = Math.round(d / (Math.PI / 12)) * (Math.PI / 12);
+        const M = around(c, mR(d));
+        return q => mApply(M, q);
+      });
+    }
+    function makeSkew(o, bb, h, p0) {
+      const c = { x: bb.cx, y: bb.cy };
+      const horiz = h === 'n' || h === 's';
+      return transformGesture(o, p => {
+        let kx = 0, ky = 0;
+        if (horiz) kx = Math.max(-2.5, Math.min(2.5, (p.x - p0.x) / (bb.h / 2)));
+        else ky = Math.max(-2.5, Math.min(2.5, (p.y - p0.y) / (bb.w / 2)));
+        const M = around(c, [1, ky, kx, 1, 0, 0]);
+        return q => mApply(M, q);
+      });
+    }
+    function makeDistort(o, bb, h, p0) {
+      const corners = [{ x: bb.x, y: bb.y }, { x: bb.x2, y: bb.y }, { x: bb.x2, y: bb.y2 }, { x: bb.x, y: bb.y2 }];
+      const idx = { nw: 0, ne: 1, se: 2, sw: 3 }[h];
+      return transformGesture(o, p => {
+        const cs = corners.slice(); cs[idx] = { x: p.x, y: p.y };
+        return q => {
+          const u = (q.x - bb.x) / bb.w, v = (q.y - bb.y) / bb.h;
+          return {
+            x: (1-u)*(1-v)*cs[0].x + u*(1-v)*cs[1].x + u*v*cs[2].x + (1-u)*v*cs[3].x,
+            y: (1-u)*(1-v)*cs[0].y + u*(1-v)*cs[1].y + u*v*cs[2].y + (1-u)*v*cs[3].y
+          };
+        };
+      });
+        }
+    function selectDown(p, e) {
+      const k = view.w / 360, so = getObj();
+      if (so) {
+        const bb = bboxOf(so.contours);
+        if (bb) {
+          const h = hitHandle(p, bb, k);
+          if (h) {
+            if (selMode === 'scale') gesture = makeScale(so, bb, h, p);
+            else if (h.length === 2) gesture = e.altKey ? makeDistort(so, bb, h, p) : makeRotate(so, bb, p);
+            else gesture = makeSkew(so, bb, h, p);
+            return;
+          }
+        }
+      }
+      const hit = hitObject(p, k);
+      if (hit) {
+        const wasSel = sel === hit.id;
+        if (!wasSel) { sel = hit.id; selMode = 'scale'; selNode = null; }
+        gesture = { type: 'moveOrToggle', snap: snap(), objId: hit.id, start: p, moved: false, map: null, toggle: wasSel,
+          upd(pp) {
+            if (dist(pp, this.start) > 2.5 * k) this.moved = true;
+            if (this.moved) {
+              const dx = pp.x - this.start.x, dy = pp.y - this.start.y;
+              this.map = q => ({ x: q.x + dx, y: q.y + dy });
+            }
+          },
+          fin() {
+            if (this.moved && this.map) {
+              const ob = objs().find(x => x.id === this.objId);
+              if (ob) { ob.contours = mapContours(ob.contours, this.map); commitFromSnap(this.snap); }
+            } else if (this.toggle) { selMode = selMode === 'scale' ? 'rotate' : 'scale'; renderCanvas(); }
+          } };
+        updateProps(); renderCanvas();
+      } else { sel = null; selNode = null; updateProps(); renderCanvas(); }
+    }
+
+    function nodeDown(p, e, dbl) {
+      const k = view.w / 360, so = getObj();
+      if (so) {
+        if (selNode) {
+          const n = so.contours[selNode.ci] && so.contours[selNode.ci].nodes[selNode.ni];
+          if (n) for (const w of ['hIn', 'hOut']) {
+            if (n[w] && dist(p, n[w]) < 8 * k) {
+              gesture = { type: 'handle', snap: snap(), objId: so.id, ci: selNode.ci, ni: selNode.ni, which: w,
+                pos: null, alt: false, moved: false,
+                upd(pp, ev) { this.pos = pp; this.alt = ev.altKey; this.moved = true; },
+                fin() {
+                  if (!this.moved || !this.pos) return;
+                  const ob = objs().find(x => x.id === this.objId); if (!ob) return;
+                  const nn = ob.contours[this.ci].nodes[this.ni];
+                  nn[this.which] = { x: F(this.pos.x), y: F(this.pos.y) };
+                  if (nn.smooth && !this.alt) {
+                    const other = this.which === 'hIn' ? 'hOut' : 'hIn';
+                    const dx = nn.x - this.pos.x, dy = nn.y - this.pos.y;
+                    const L = Math.hypot(dx, dy) || 1;
+                    const len = nn[other] ? Math.hypot(nn[other].x - nn.x, nn[other].y - nn.y) : L;
+                    nn[other] = { x: F(nn.x + dx / L * len), y: F(nn.y + dy / L * len) };
+                  }
+                  commitFromSnap(this.snap);
+                } };
+              return;
+            }
+          }
+        }
+        const nh = hitNode(so, p, 8 * k);
+        if (nh) {
+          if (dbl && selNode && selNode.ci === nh.ci && selNode.ni === nh.ni) { toggleSmooth(so, nh); return; }
+          selNode = nh;
+          gesture = { type: 'node', snap: snap(), objId: so.id, ci: nh.ci, ni: nh.ni, start: p, delta: { x: 0, y: 0 }, moved: false,
+            upd(pp) {
+              this.delta = { x: pp.x - this.start.x, y: pp.y - this.start.y };
+              this.moved = Math.hypot(this.delta.x, this.delta.y) > .4;
+            },
+            fin() {
+              if (!this.moved) return;
+              const ob = objs().find(x => x.id === this.objId); if (!ob) return;
+              const nn = ob.contours[this.ci].nodes[this.ni], d = this.delta;
+              nn.x = F(nn.x + d.x); nn.y = F(nn.y + d.y);
+              if (nn.hIn) { nn.hIn.x = F(nn.hIn.x + d.x); nn.hIn.y = F(nn.hIn.y + d.y); }
+              if (nn.hOut) { nn.hOut.x = F(nn.hOut.x + d.x); nn.hOut.y = F(nn.hOut.y + d.y); }
+              commitFromSnap(this.snap);
+            } };
+          updateProps(); renderCanvas();
+          return;
+        }
+        const sh = hitSegment(so, p, 6 * k);
+        if (sh) {
+          if (sh.t < .1 || sh.t > .9) {
+            const len = so.contours[sh.ci].nodes.length;
+            selNode = { ci: sh.ci, ni: (sh.seg + (sh.t > .5 ? 1 : 0)) % len };
+            updateProps(); renderCanvas();
+            return;
+          }
+          commit(() => { selNode = insertNodeAt(so, sh); });
+          gesture = { type: 'node', snap: snap(), objId: so.id, ci: selNode.ci, ni: selNode.ni, start: p, delta: { x: 0, y: 0 }, moved: false,
+            upd: function (pp) {
+              this.delta = { x: pp.x - this.start.x, y: pp.y - this.start.y };
+              this.moved = Math.hypot(this.delta.x, this.delta.y) > .4;
+            },
+            fin: function () {
+              if (!this.moved) return;
+              const ob = objs().find(x => x.id === this.objId); if (!ob) return;
+              const nn = ob.contours[this.ci].nodes[this.ni], d = this.delta;
+              nn.x = F(nn.x + d.x); nn.y = F(nn.y + d.y);
+              if (nn.hIn) { nn.hIn.x = F(nn.hIn.x + d.x); nn.hIn.y = F(nn.hIn.y + d.y); }
+              if (nn.hOut) { nn.hOut.x = F(nn.hOut.x + d.x); nn.hOut.y = F(nn.hOut.y + d.y); }
+              commitFromSnap(this.snap);
+            } };
+          return;
+        }
+      }
+      const hit = hitObject(p, k);
+      if (hit) { sel = hit.id; selNode = null; updateProps(); renderCanvas(); }
+    }
+    function toggleSmooth(o, nh) {
+      commit(() => {
+        const ns = o.contours[nh.ci].nodes, n = ns[nh.ni], len = ns.length;
+        n.smooth = !n.smooth;
+        if (n.smooth) {
+          const prev = ns[(nh.ni - 1 + len) % len], next = ns[(nh.ni + 1) % len];
+          const tx = (next.x - prev.x) / 5, ty = (next.y - prev.y) / 5;
+          n.hOut = { x: F(n.x + tx), y: F(n.y + ty) };
+          n.hIn = { x: F(n.x - tx), y: F(n.y - ty) };
+        }
+      });
+    }
+    function deleteSelectedNode() {
+      const o = getObj();
+      if (!o || !selNode) return;
+      commit(() => {
+        const c = o.contours[selNode.ci];
+        c.nodes.splice(selNode.ni, 1);
+        if (c.nodes.length < 3) o.contours.splice(selNode.ci, 1);
+        if (!o.contours.length) {
+          const list = objs(), i = list.indexOf(o);
+          if (i >= 0) list.splice(i, 1);
+          sel = null;
+        }
+        selNode = null;
+      });
+    }
+
+    /* ================= Перо ================= */
+    function penDown(p, dbl) {
+      const k = view.w / 360;
+      if (dbl) { finishPen(); return; }
+      if (pen.nodes.length >= 3 && dist(p, pen.nodes[0]) < 10 * k) { finishPen(); return; }
+      const n = { x: F(p.x), y: F(p.y), hIn: null, hOut: null, smooth: false };
+      pen.nodes.push(n); pen.dragging = true; pen.dragNode = n;
+      renderCanvas();
+    }
+    function finishPen() {
+      if (pen.nodes.length >= 3) {
+        const nodes = pen.nodes;
+        commit(() => {
+          let t = getObj();
+          if (!t) { t = { id: uid(), contours: [] }; objs().push(t); }
+          t.contours.push({ nodes });
+          sel = t.id;
+        });
+      }
+      pen.nodes = []; pen.dragging = false; pen.dragNode = null;
       renderCanvas();
     }
 
-    function renderCanvas() {
-      drawSvg.innerHTML = '';
-      const strokes = glyphData[currentChar] || [];
-      strokes.forEach(s => {
-        const outline = getStroke(s.points, {
-          size: s.size,
-          thinning: s.thinning,
-          smoothing: 0.5,
-          streamline: 0.5,
-          last: true
-        });
-        const path = document.createElementNS(SVG_NS, 'path');
-        path.setAttribute('d', getSvgPathFromStroke(outline));
-        path.setAttribute('fill', '#0f172a');
-        drawSvg.appendChild(path);
-      });
-
-      if (isDrawing && currentPoints.length > 0) {
-        const outline = getStroke(currentPoints, {
-          size: Number(brushSizeInput.value),
-          thinning: Number(brushThinningInput.value),
-          smoothing: 0.5,
-          streamline: 0.5,
-          last: true
-        });
-        const path = document.createElementNS(SVG_NS, 'path');
-        path.setAttribute('d', getSvgPathFromStroke(outline));
-        path.setAttribute('fill', '#4f46e5');
-        drawSvg.appendChild(path);
+    /* ================= Ластик ================= */
+    function eraseAt(p) {
+      const r2 = eraserR * eraserR, list = objs();
+      for (let oi = list.length - 1; oi >= 0; oi--) {
+        const o = list[oi], keep = [];
+        let touched = false;
+        for (const c of o.contours) {
+          const pts = flattenContour(c, 2.2);
+          if (pts.length < 3) { keep.push(c); continue; }
+          const inside = pts.map(q => (q.x - p.x)  2 + (q.y - p.y)  2 < r2);
+          if (!inside.some(Boolean)) { keep.push(c); continue; }
+          touched = true;
+          if (inside.every(Boolean)) continue;
+          const start = inside.indexOf(true);
+          let run = [];
+          for (let j = 1; j <= pts.length; j++) {
+            const idx = (start + j) % pts.length;
+            if (!inside[idx]) run.push({ x: pts[idx].x, y: pts[idx].y });
+            if (inside[idx] || j === pts.length) {
+              if (run.length >= 3) {
+                const nodes = smoothNodes(run, .5);
+                nodes[0].hIn = null; nodes[0].smooth = false;
+                nodes[nodes.length - 1].hOut = null; nodes[nodes.length - 1].smooth = false;
+                const cc = { nodes };
+                if (Math.abs(areaOf(flattenContour(cc, 4))) > 5) keep.push(cc);
+              }
+              run = [];
+            }
+          }
+        }
+        if (touched) {
+          eraseChanged = true;
+          o.contours = keep;
+          if (!keep.length) {
+            list.splice(oi, 1);
+            if (sel === o.id) { sel = null; selNode = null; }
+          }
+        }
       }
     }
 
-    function getPointerPos(e) {
-      const rect = drawSvg.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 360;
-      const y = ((e.clientY - rect.top) / rect.height) * 360;
-      const pressure = (typeof e.pressure === 'number' && e.pressure > 0) ? e.pressure : 0.5;
-      return [x, y, pressure];
+    /* ================= Кисть ================= */
+    function endBrush() {
+      if (brushPts && brushPts.length > 2) {
+        const out = strokeOutline(brushPts);
+        if (out.length >= 3) commit(() => {
+          let t = getObj();
+          if (!t) { t = { id: uid(), contours: [] }; objs().push(t); }
+          t.contours.push(outlineToContour(out));
+          sel = t.id;
+        });
+      }
+      brushPts = null;
+      renderCanvas();
     }
 
-    drawSvg.addEventListener('pointerdown', (e) => {
+    /* ================= События указателя ================= */
+    drawSvg.addEventListener('contextmenu', e => e.preventDefault());
+    drawSvg.addEventListener('pointerdown', e => {
+      if (modalOpen) return;
       e.preventDefault();
       try { drawSvg.setPointerCapture(e.pointerId); } catch (_) {}
-      isDrawing = true;
-      currentPoints = [getPointerPos(e)];
-      renderCanvas();
-    });
-
-    drawSvg.addEventListener('pointermove', (e) => {
-      if (!isDrawing) return;
-      e.preventDefault();
-      currentPoints.push(getPointerPos(e));
-      renderCanvas();
-    });
-
-    function endStroke(e) {
-      if (!isDrawing) return;
-      isDrawing = false;
-      if (currentPoints.length > 2) {
-        if (!glyphData[currentChar]) glyphData[currentChar] = [];
-        glyphData[currentChar].push({
-          points: currentPoints,
-          size: Number(brushSizeInput.value),
-          thinning: Number(brushThinningInput.value)
-        });
-        saveProject();
-        updateLiveFont();
+      const p = pos(e);
+      const now = performance.now();
+      const dbl = now - lastTap.t < 350 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 12 * view.w / 360;
+      lastTap = { t: now, x: p.x, y: p.y };
+      if (tool === 'hand'  spaceDown  e.button === 1) {
+        gesture = { type: 'pan', v0: { ...view }, sx: e.clientX, sy: e.clientY,
+          upd(_, ev) {
+            const r = drawSvg.getBoundingClientRect();
+            view.x = this.v0.x - (ev.clientX - this.sx) * this.v0.w / r.width;
+            view.y = this.v0.y - (ev.clientY - this.sy) * this.v0.w / r.height;
+            setViewBox();
+          }, fin() {} };
+        return;
       }
-      currentPoints = [];
-      renderCanvas();
-      renderGrid();
-    }
-
-    drawSvg.addEventListener('pointerup', endStroke);
-    drawSvg.addEventListener('pointercancel', endStroke);
-    drawSvg.addEventListener('pointerleave', (e) => {
-      if (isDrawing && e.buttons === 0) endStroke(e);
+      if (e.button === 2) return;
+      if (tool === 'brush') { brushPts = [[p.x, p.y, p.pressure]]; renderCanvas(); }
+      else if (tool === 'eraser') {
+        gesture = { type: 'erase', snap: snap(), last: p,
+          upd(pp) {
+            const d = dist(pp, this.last), steps = Math.max(1, Math.ceil(d / (eraserR * .4)));
+            for (let i = 1; i <= steps; i++)
+              eraseAt({ x: this.last.x + (pp.x - this.last.x) * i / steps, y: this.last.y + (pp.y - this.last.y) * i / steps });
+            this.last = pp;
+          },
+          fin() { if (eraseChanged) commitFromSnap(this.snap); } };
+        eraseChanged = false;
+        eraseAt(p); renderCanvas();
+      }
+      else if (tool === 'pen') penDown(p, dbl);
+      else if (tool === 'select') selectDown(p, e);
+      else if (tool === 'node') nodeDown(p, e, dbl);
     });
-
-    document.getElementById('undoBtn').onclick = () => {
-      if (glyphData[currentChar] && glyphData[currentChar].length) {
-        glyphData[currentChar].pop();
-        saveProject();
+    drawSvg.addEventListener('pointermove', e => {
+      if (modalOpen) return;
+      const p = pos(e);
+      if (tool === 'eraser') { eraserPos = p; if (!gesture) renderCanvas(); }
+      if (gesture) {
+        e.preventDefault();
+        gesture.upd(p, e);
         renderCanvas();
-        renderGrid();
-        updateLiveFont();
+        return;
+      }
+      if (brushPts) { e.preventDefault(); brushPts.push([p.x, p.y, p.pressure]); renderCanvas(); return; }
+      if (tool === 'pen') {
+        if (pen.dragging && pen.dragNode) {
+          const n = pen.dragNode;
+          if (Math.hypot(p.x - n.x, p.y - n.y) > 2) {
+            n.hOut = { x: F(p.x), y: F(p.y) };
+            n.hIn = { x: F(2 * n.x - p.x), y: F(2 * n.y - p.y) };
+            n.smooth = true;
+          }
+        } else pen.cursor = p;
+        renderCanvas();
+      }
+    });
+    function pointerEnd(e) {
+      if (gesture) { const g = gesture; gesture = null; g.fin(); renderCanvas(); updateProps(); }
+      if (brushPts) endBrush();
+      if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
+    }
+    drawSvg.addEventListener('pointerup', pointerEnd);
+    drawSvg.addEventListener('pointercancel', pointerEnd);
+    drawSvg.addEventListener('pointerleave', e => {
+      if (tool === 'eraser') { eraserPos = null; renderCanvas(); }
+      if (brushPts && e.buttons === 0) endBrush();
+    });
+    drawSvg.addEventListener('wheel', e => {
+      if (modalOpen) return;
+      e.preventDefault();
+      zoomAt(e.deltaY > 0 ? 1.12 : 1 / 1.12, pos(e));
+    }, { passive: false });
+
+    /* ================= Панель свойств ================= */
+    function setTool(t) {
+      tool = t;
+      pen.nodes = []; pen.dragging = false; brushPts = null; eraserPos = null; gesture = null;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+      drawSvg.style.cursor = { select: 'default', node: 'default', pen: 'crosshair', brush: 'crosshair', eraser: 'none', hand: 'grab' }[t];
+      updateProps(); renderCanvas();
+    }
+    document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+
+    function updateProps() {
+      const show = (id, on) => $(id).classList.toggle('hidden', !on);
+      show('propSelect', tool === 'select');
+      show('propNode', tool === 'node');
+      show('propBrush', tool === 'brush');
+      show('propPen', tool === 'pen');
+      show('propEraser', tool === 'eraser');
+      show('propHand', tool === 'hand');
+      const o = getObj();
+      const bb = o ? bboxOf(o.contours) : null;
+      const setVal = (id, v) => { const i = $(id); if (document.activeElement !== i) i.value = v; };
+      if (bb) {
+        setVal('propX', Math.round(bb.x)); setVal('propY', Math.round(bb.y));
+        setVal('propW', Math.round(bb.w)); setVal('propH', Math.round(bb.h));
+      } else { setVal('propX', ''); setVal('propY', ''); setVal('propW', ''); setVal('propH', ''); }
+      ['dupBtn', 'flipHBtn', 'flipVBtn', 'backBtn', 'frontBtn', 'delBtn', 'propX', 'propY', 'propW', 'propH', 'propAngle']
+        .forEach(id => $(id).disabled = !o);
+      ['addNodeBtn', 'delNodeBtn', 'smoothBtn'].forEach(id => $(id).disabled = !(o && selNode));
+      $('undoBtn').disabled = !hist().u.length;
+      $('redoBtn').disabled = !hist().r.length;
+    }
+    function transformSelected(fn) {
+      const o = getObj(); if (!o) return;
+      commit(() => { o.contours = mapContours(o.contours, fn); });
+    }
+    $('propX').addEventListener('change', () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      const dx = Number($('propX').value) - bb.x;
+      if (dx) transformSelected(q => ({ x: q.x + dx, y: q.y }));
+    });
+    $('propY').addEventListener('change', () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      const dy = Number($('propY').value) - bb.y;
+      if (dy) transformSelected(q => ({ x: q.x, y: q.y + dy }));
+    });
+    $('propW').addEventListener('change', () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      const s = Math.max(1, Number($('propW').value)) / bb.w;
+      transformSelected(q => ({ x: bb.x + (q.x - bb.x) * s, y: q.y }));
+      });
+    $('propH').addEventListener('change', () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      const s = Math.max(1, Number($('propH').value)) / bb.h;
+      transformSelected(q => ({ x: q.x, y: bb.y + (q.y - bb.y) * s }));
+    });
+    $('propAngle').addEventListener('change', () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      const a = Number($('propAngle').value) * Math.PI / 180;
+      $('propAngle').value = 0;
+      if (a) { const M = around({ x: bb.cx, y: bb.cy }, mR(a)); transformSelected(q => mApply(M, q)); }
+    });
+    $('dupBtn').onclick = () => {
+      const o = getObj(); if (!o) return;
+      commit(() => {
+        const cp = clone(o);
+        cp.id = uid();
+        cp.contours = mapContours(cp.contours, q => ({ x: q.x + 14, y: q.y + 14 }));
+        objs().push(cp); sel = cp.id;
+      });
+    };
+    $('delBtn').onclick = () => {
+      const o = getObj(); if (!o) return;
+      commit(() => { const l = objs(), i = l.indexOf(o); if (i >= 0) l.splice(i, 1); sel = null; selNode = null; });
+    };
+    $('flipHBtn').onclick = () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      transformSelected(q => ({ x: 2 * bb.cx - q.x, y: q.y }));
+    };
+    $('flipVBtn').onclick = () => {
+      const o = getObj(); if (!o) return; const bb = bboxOf(o.contours); if (!bb) return;
+      transformSelected(q => ({ x: q.x, y: 2 * bb.cy - q.y }));
+    };
+    $('frontBtn').onclick = () => {
+      const o = getObj(); if (!o) return;
+      commit(() => { const l = objs(), i = l.indexOf(o); l.splice(i, 1); l.push(o); });
+    };
+    $('backBtn').onclick = () => {
+      const o = getObj(); if (!o) return;
+      commit(() => { const l = objs(), i = l.indexOf(o); l.splice(i, 1); l.unshift(o); });
+    };
+    $('addNodeBtn').onclick = () => {
+      const o = getObj(); if (!o || !selNode) return;
+      commit(() => { selNode = insertNodeAt(o, { ci: selNode.ci, seg: selNode.ni, t: .5 }); });
+    };
+    $('delNodeBtn').onclick = deleteSelectedNode;
+    $('smoothBtn').onclick = () => { const o = getObj(); if (o && selNode) toggleSmooth(o, selNode); };
+    $('undoBtn').onclick = undo;
+    $('redoBtn').onclick = redo;
+    $('clearBtn').onclick = () => { if (objs().length) commit(() => { glyphData[currentChar] = []; sel = null; selNode = null; }); };
+    $('zoomInBtn').onclick = () => zoomAt(1 / 1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 });
+    $('zoomOutBtn').onclick = () => zoomAt(1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 });
+    $('zoomResetBtn').onclick = () => { view = { x: 0, y: 0, w: 360 }; setViewBox(); renderCanvas(); };
+    brushSize.oninput = () => { $('sizeVal').textContent = brushSize.value + 'px'; };
+    brushThinning.oninput = () => { $('thinningVal').textContent = brushThinning.value; };
+    $('eraserSize').oninput = () => { eraserR = Number($('eraserSize').value); $('eraserVal').textContent = eraserR + 'px'; renderCanvas(); };
+
+    /* ================= Клавиатура ================= */
+    document.addEventListener('keydown', e => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      const typing = tag === 'input'  tag === 'textarea'  tag === 'select';
+      if (e.key === 'Escape') {
+        if (modalOpen) { closeModal(); return; }
+        if (typing) { e.target.blur(); return; }
+        if (pen.nodes.length) { pen.nodes = []; renderCanvas(); return; }
+        sel = null; selNode = null; updateProps(); renderCanvas(); return;
+      }
+      if (typing || modalOpen) return;
+      if (e.code === 'Space') { if (!spaceDown) { spaceDown = true; drawSvg.style.cursor = 'grab'; } e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD') { e.preventDefault(); $('dupBtn').click(); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (tool === 'node' && selNode) deleteSelectedNode();
+        else $('delBtn').click();
+        return;
+      }
+      if (e.key === 'Enter' && tool === 'pen') { finishPen(); return; }
+      if (e.key.startsWith('Arrow') && getObj()) {
+        e.preventDefault();
+        const s = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0;
+        const dy = e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0;
+        transformSelected(q => ({ x: q.x + dx, y: q.y + dy }));
+        return;
+      }
+      const tools = { KeyV: 'select', KeyN: 'node', KeyP: 'pen', KeyB: 'brush', KeyE: 'eraser', KeyH: 'hand' };
+      if (tools[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool(tools[e.code]); return; }
+      if (e.code === 'Equal' || e.code === 'NumpadAdd') zoomAt(1 / 1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 });
+      if (e.code === 'Minus' || e.code === 'NumpadSubtract') zoomAt(1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 });
+    });
+    document.addEventListener('keyup', e => {
+      if (e.code === 'Space') { spaceDown = false; setTool(tool); }
+    });
+
+    /* ================= Импорт ================= */
+    const FAMILIES = ['Georgia', 'Times New Roman', 'Arial', 'Verdana', 'Courier New', 'Impact',
+      'Comic Sans MS', 'Trebuchet MS', 'Palatino Linotype', 'Segoe Script', 'Brush Script MT',
+      'cursive', 'serif', 'sans-serif', 'monospace'];
+    let importTab = 'symbol', pendingContours = null, loadedFont = null, loadedFontName = '';
+    let pngSource = null, regenTimer = null;
+
+    const famSel = $('symFamily');
+    for (const f of FAMILIES) {
+      const op = document.createElement('option');
+      op.value = f; op.textContent = f; op.style.fontFamily = f;
+      famSel.appendChild(op);
+    }
+    function openModal(tab) {
+      modalOpen = true;
+      $('importModal').classList.remove('hidden');
+      $('symChar').value = currentChar;
+      switchTab(tab || 'symbol');
+    }
+    function closeModal() {
+      modalOpen = false;
+      $('importModal').classList.add('hidden');
+      pendingContours = null;
+    }
+    function switchTab(t) {
+      importTab = t;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+      $('tabSymbol').classList.toggle('hidden', t !== 'symbol');
+      $('tabPng').classList.toggle('hidden', t !== 'png');
+      $('tabSvg').classList.toggle('hidden', t !== 'svg');
+      regenPreview();
+    }
+    $('importBtn').onclick = () => openModal('symbol');
+    $('modalClose').onclick = closeModal;
+    $('cancelImportBtn').onclick = closeModal;
+    $('importModal').addEventListener('pointerdown', e => { if (e.target === $('importModal')) closeModal(); });
+    document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    function scheduleRegen() { clearTimeout(regenTimer); regenTimer = setTimeout(regenPreview, 150); }
+
+    function otPathToContours(path, map) {
+      const cs = [];
+      let cur = null, prev = null;
+      for (const c of path.commands) {
+        if (c.type === 'M') {
+          cur = { nodes: [] }; cs.push(cur);
+          const p = map(c.x, c.y);
+          cur.nodes.push({ x: F(p.x), y: F(p.y), hIn: null, hOut: null, smooth: false });
+          prev = p;
+        } else if (c.type === 'L' && cur) {
+          const p = map(c.x, c.y);
+          cur.nodes.push({ x: F(p.x), y: F(p.y), hIn: null, hOut: null, smooth: false });
+          prev = p;
+        } else if (c.type === 'Q' && cur) {
+          const q = map(c.x1, c.y1), p = map(c.x, c.y);
+          const last = cur.nodes[cur.nodes.length - 1];
+          last.hOut = { x: F(prev.x + (q.x - prev.x) * 2 / 3), y: F(prev.y + (q.y - prev.y) * 2 / 3) };
+          last.smooth = true;
+          cur.nodes.push({ x: F(p.x), y: F(p.y), smooth: true, hOut: null,
+            hIn: { x: F(p.x + (q.x - p.x) * 2 / 3), y: F(p.y + (q.y - p.y) * 2 / 3) } });
+          prev = p;
+        } else if (c.type === 'C' && cur) {
+          const c1 = map(c.x1, c.y1), c2 = map(c.x2, c.y2), p = map(c.x, c.y);
+          const last = cur.nodes[cur.nodes.length - 1];
+          last.hOut = { x: F(c1.x), y: F(c1.y) };
+          last.smooth = true;
+          cur.nodes.push({ x: F(p.x), y: F(p.y), smooth: true, hOut: null, hIn: { x: F(c2.x), y: F(c2.y) } });
+          prev = p;
+        } else if (c.type === 'Z' && cur) {
+          if (cur.nodes.length > 1) {
+            const f = cur.nodes[0], l = cur.nodes[cur.nodes.length - 1];
+            if (Math.hypot(f.x - l.x, f.y - l.y) < .05) { f.hIn = l.hIn; cur.nodes.pop(); }
+          }
+          cur = null;
+        }
+      }
+      return cs.filter(c => c.nodes.length >= 3);
+    }
+    function symbolContours() {
+      const ch = [...($('symChar').value  currentChar)][0]  currentChar;
+      const isLower = ch.toLowerCase() === ch && ch.toUpperCase() !== ch;
+      const target = isLower ? 125 : 200;
+      if (loadedFont && famSel.value === 'custom') {
+        const glyph = loadedFont.charToGlyph(ch);
+        if (!glyph || glyph.index === 0) throw new Error('В этом шрифте нет символа «' + ch + '»');
+        const bb = glyph.path.getBoundingBox();
+        if (!isFinite(bb.x1)) throw new Error('Пустой контур символа');
+        const upm = loadedFont.unitsPerEm || 1000;
+        const os2 = loadedFont.tables && loadedFont.tables.os2;
+        const capH = (os2 && os2.sCapHeight)  loadedFont.ascender * .9  upm * .7;
+        const xH = (os2 && os2.sxHeight) || upm * .5;
+        const s = target / (isLower ? xH : capH);
+        const cx = (bb.x1 + bb.x2) / 2;
+        return otPathToContours(glyph.path, (x, y) => ({ x: 180 + (x - cx) * s, y: 270 - y * s }));
+      }
+      const cv = document.createElement('canvas');
+      cv.width = 480; cv.height = 480;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 480, 480);
+      ctx.fillStyle = '#000';
+      ctx.font = ${$('symItalic').checked ? 'italic ' : ''}${$('symWeight').value} 300px "${famSel.value}";
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      const m = ctx.measureText(ch);
+      const asc = m.actualBoundingBoxAscent || 220;
+      ctx.fillText(ch, 240, 330);
+      const loops = bitmapLoops(ctx.getImageData(0, 0, 480, 480).data, 480, 480, 128, false);
+      if (!loops.length) throw new Error('Символ не отрисовался');
+      const s = target / asc;
+      const mapped = loops.map(lp => lp.map(p => ({ x: 180 + (p.x - 240) * s, y: 270 + (p.y - 330) * s })));
+      return loopsToContours(mapped, 1, .6);
+    }
+    function pngContours() {
+      if (!pngSource) return null;
+      const { data, w, h } = pngSource;
+      const loops = bitmapLoops(data, w, h, Number($('pngThreshold').value), $('pngInvert').checked);
+      if (!loops.length) return [];
+      const fit = fitLoops(loops, 240, 200, 270, 180);
+      if (!fit) return [];
+      return loopsToContours(fit.loops, Number($('pngSimplify').value), Number($('pngSmooth').value));
+    }
+    function shapeToD(elm) {
+      const g = n => Number(elm.getAttribute(n) || 0);
+      const tag = elm.tagName.toLowerCase();
+      if (tag === 'path') return elm.getAttribute('d') || '';
+      if (tag === 'rect') {
+        const x = g('x'), y = g('y'), w = g('width'), h = g('height');
+    let rx = g('rx')  g('ry'), ry = g('ry')  g('rx');
+        rx = Math.min(rx, w / 2); ry = Math.min(ry, h / 2);
+        if (rx > 0) return M ${x + rx} ${y} H ${x + w - rx} A ${rx} ${ry} 0 0 1 ${x + w} ${y + ry} V ${y + h - ry} A ${rx} ${ry} 0 0 1 ${x + w - rx} ${y + h} H ${x + rx} A ${rx} ${ry} 0 0 1 ${x} ${y + h - ry} V ${y + ry} A ${rx} ${ry} 0 0 1 ${x + rx} ${y} Z;
+        return M ${x} ${y} H ${x + w} V ${y + h} H ${x} Z;
+      }
+      if (tag === 'circle') {
+        const cx = g('cx'), cy = g('cy'), r = g('r');
+        return M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy} Z;
+      }
+      if (tag === 'ellipse') {
+        const cx = g('cx'), cy = g('cy'), rx = g('rx'), ry = g('ry');
+        return M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z;
+      }
+      if (tag === 'line') return M ${g('x1')} ${g('y1')} L ${g('x2')} ${g('y2')};
+      if (tag === 'polyline' || tag === 'polygon') {
+        const nums = (elm.getAttribute('points') || '').trim().split(/[\s,]+/).map(Number);
+        let d = '';
+        for (let i = 0; i + 1 < nums.length; i += 2) d += (i ? ' L ' : 'M ') + nums[i] + ' ' + nums[i + 1];
+        return d + (tag === 'polygon' ? ' Z' : '');
+      }
+      return '';
+    }
+    function svgContours(text) {
+      const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+      const root = doc.documentElement;
+      if (!root  root.tagName.toLowerCase() !== 'svg'  doc.querySelector('parsererror'))
+        throw new Error('Не удалось разобрать SVG');
+      const holder = document.createElement('div');
+      holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden;visibility:hidden;';
+      const svgClone = document.importNode(root, true);
+      const vb = svgClone.getAttribute('viewBox');
+      svgClone.removeAttribute('viewBox');
+      svgClone.setAttribute('width', '10000');
+      svgClone.setAttribute('height', '10000');
+      holder.appendChild(svgClone);
+      document.body.appendChild(holder);
+      const raw = [];
+      try {
+        const shapes = svgClone.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon');
+        for (const sh of shapes) {
+          const d = shapeToD(sh);
+          if (!d) continue;
+          let pEl = sh;
+          if (sh.tagName.toLowerCase() !== 'path') {
+            const pe = document.createElementNS(SVG_NS, 'path');
+            for (const a of sh.attributes) pe.setAttribute(a.name, a.value);
+            pe.setAttribute('d', d);
+            sh.replaceWith(pe);
+            pEl = pe;
+          }
+          const L = pEl.getTotalLength();
+          if (!isFinite(L) || L < .5) continue;
+          const ctm = pEl.getCTM() || { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+          const sc = Math.sqrt(Math.abs(ctm.a * ctm.d - ctm.b * ctm.c)) || 1;
+          const n = Math.min(2500, Math.max(24, Math.ceil(L / 1.5)));
+          const step = L / n;
+          const cs = getComputedStyle(pEl);
+          const fillNone = cs.fill === 'none' || cs.fillOpacity === '0';
+          const strokeOn = cs.stroke && cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0;
+          const sw = strokeOn ? parseFloat(cs.strokeWidth) : 0;
+          let cur = [], prev = null;
+          const parts = [];
+          for (let j = 0; j <= n; j++) {
+            const pt = pEl.getPointAtLength(j * step);
+            const mp = { x: ctm.a * pt.x + ctm.c * pt.y + ctm.e, y: ctm.b * pt.x + ctm.d * pt.y + ctm.f };
+            if (prev && dist(mp, prev) > step * sc * 6) { if (cur.length > 1) parts.push(cur); cur = []; }
+            cur.push(mp); prev = mp;
+          }
+          if (cur.length > 1) parts.push(cur);
+          for (const pts of parts) {
+            const closed = dist(pts[0], pts[pts.length - 1]) < step * sc * 2.5;
+            if (!fillNone  closed  !strokeOn) raw.push({ pts, open: false, sw: 0 });
+            else raw.push({ pts, open: true, sw: sw * sc });
+          }
+        }
+      } finally { holder.remove(); }
+      if (!raw.length) throw new Error('В SVG не найдено контуров');
+      const allPts = [];
+      for (const r of raw) for (const p of r.pts) allPts.push(p);
+      const fit = fitLoops([allPts], 240, 200, 270, 180);
+      if (!fit) return [];
+      let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+      for (const p of allPts) {
+        if (p.x < x1) x1 = p.x; if (p.x > x2) x2 = p.x;
+        if (p.y < y1) y1 = p.y; if (p.y > y2) y2 = p.y;
+      }
+      const bcx = (x1 + x2) / 2, s = fit.s;
+      const f = p => ({ x: 180 + (p.x - bcx) * s, y: 270 - (y2 - p.y) * s });
+      const tol = Number($('svgTol').value), sm = Number($('svgSmooth').value);
+      const cs = [];
+      for (const r of raw) {
+        let pts = r.pts.map(f);
+        if (r.open) {
+          pts = ribbonPoly(pts, Math.max(1.4, r.sw * s));
+          if (pts.length < 3) continue;
+          const c = { nodes: smoothNodes(pts, Math.min(sm, .4)) };
+          if (Math.abs(areaOf(flattenContour(c, 4))) > 3) cs.push(c);
+        } else {
+          const simp = simplifyClosed(pts, tol);
+          if (simp.length < 3) continue;
+          const c = { nodes: smoothNodes(simp, sm) };
+          if (Math.abs(areaOf(flattenContour(c, 4))) > 3) cs.push(c);
+        }
+      }
+      return cs;
+    }
+    function regenPreview() {
+      const pv = $('importPreview');
+      pv.innerHTML = '';
+      pv.appendChild(el('line', { x1: 0, y1: 70, x2: 360, y2: 70, stroke: '#cbd5e1', 'stroke-dasharray': '4 4' }));
+      pv.appendChild(el('line', { x1: 0, y1: 145, x2: 360, y2: 145, stroke: '#cbd5e1', 'stroke-dasharray': '4 4' }));
+      pv.appendChild(el('line', { x1: 0, y1: 270, x2: 360, y2: 270, stroke: '#f43f5e', 'stroke-width': 1.5 }));
+      pendingContours = null;
+      try {
+        let cs = null;
+        if (importTab === 'symbol') cs = symbolContours();
+        else if (importTab === 'png') cs = pngContours();
+        else if (importTab === 'svg') {
+          const t = $('svgText').value.trim();
+          cs = t ? svgContours(t) : null;
+        }
+        if (cs && cs.length) {
+          normalizeContours(cs, 1);
+          pendingContours = cs;
+          pv.appendChild(el('path', { d: contoursD(cs), fill: '#0f172a', 'fill-rule': 'nonzero' }));
+        }
+      } catch (err) {
+        const t = el('text', { x: 180, y: 180, 'text-anchor': 'middle', fill: '#94a3b8', 'font-size': 13 });
+        t.textContent = err.message || String(err);
+        pv.appendChild(t);
+      }
+      $('insertBtn').disabled = !pendingContours;
+    }
+    ['symChar', 'symWeight'].forEach(id => $(id).addEventListener('input', scheduleRegen));
+    ['symFamily', 'symItalic'].forEach(id => $(id).addEventListener('change', scheduleRegen));
+    ['pngThreshold', 'pngInvert', 'pngSmooth', 'pngSimplify'].forEach(id => $(id).addEventListener('input', () => {
+      $('pngThrVal').textContent = $('pngThreshold').value;
+      $('pngSmoothVal').textContent = $('pngSmooth').value;
+      $('pngSimpVal').textContent = $('pngSimplify').value;
+      scheduleRegen();
+    }));
+    ['svgTol', 'svgSmooth'].forEach(id => $(id).addEventListener('input', () => {
+      $('svgTolVal').textContent = $('svgTol').value;
+      $('svgSmoothVal').textContent = $('svgSmooth').value;
+      scheduleRegen();
+    }));
+    $('svgText').addEventListener('input', scheduleRegen);
+    $('symFontBtn').onclick = () => $('symFontFile').click();
+    $('symFontFile').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const buf = await file.arrayBuffer();
+        loadedFont = opentype.parse(buf);
+        loadedFontName = (loadedFont.names && loadedFont.names.fontFamily &&
+          (loadedFont.names.fontFamily.en  loadedFont.names.fontFamily.ru))  file.name;
+        let op = famSel.querySelector('option[value="custom"]');
+        if (!op) { op = document.createElement('option'); op.value = 'custom'; famSel.appendChild(op); }
+        op.textContent = '📄 ' + loadedFontName;
+        famSel.value = 'custom';
+        $('symFontName').textContent = loadedFontName;
+        regenPreview();
+      } catch (err) { alert('Не удалось прочитать шрифт: ' + (err.message || err)); }
+      e.target.value = '';
+    });
+    function loadPngFile(file) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const s = Math.min(1, 360 / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        pngSource = { data: ctx.getImageData(0, 0, w, h).data, w, h };
+        URL.revokeObjectURL(url);
+        if (!modalOpen) openModal('png'); else switchTab('png');
+        regenPreview();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); alert('Не удалось открыть картинку'); };
+      img.src = url;
+    }
+    $('pngFile').addEventListener('change', e => { if (e.target.files[0]) loadPngFile(e.target.files[0]); e.target.value = ''; });
+    function loadSvgFile(file) {
+      const r = new FileReader();
+      r.onload = () => { $('svgText').value = r.result; if (!modalOpen) openModal('svg'); else switchTab('svg'); regenPreview(); };
+      r.readAsText(file);
+    }
+    $('svgFile').addEventListener('change', e => { if (e.target.files[0]) loadSvgFile(e.target.files[0]); e.target.value = ''; });
+    $('insertBtn').onclick = () => {
+      if (!pendingContours) return;
+      const cs = clone(pendingContours);
+      commit(() => {
+        const o = { id: uid(), contours: cs };
+        objs().push(o);
+        sel = o.id; selNode = null;
+      });
+      closeModal();
+      setTool('select');
+    };
+    const canvasBox = $('canvasBox');
+    canvasBox.addEventListener('dragover', e => e.preventDefault());
+    canvasBox.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      if (/svg/.test(f.type) || /\.svg$/i.test(f.name)) loadSvgFile(f);
+      else if (/^image\//.test(f.type)) loadPngFile(f);
+    });
+    document.addEventListener('paste', e => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (const it of items) if (it.type && it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) { loadPngFile(f); e.preventDefault(); break; }
+      }
+    });
+
+    /* ================= Сборка шрифта ================= */
+    function buildOpenTypeFont() {
+      if (typeof opentype === 'undefined') throw new Error('opentype.js не загружен');
+      const unitsPerEm = 1000, ascender = 800, descender = -200, baselineY = 270, scale = 1000 / 360;
+      const glyphs = [
+        new opentype.Glyph({ name: '.notdef', unicode: 0, advanceWidth: 500, path: new opentype.Path() }),
+        new opentype.Glyph({ name: 'space', unicode: 32, advanceWidth: 350, path: new opentype.Path() })
+      ];
+      for (const char in glyphData) {
+        const objects = glyphData[char];
+        if (!objects || !objects.length) continue;
+        const fontPath = new opentype.Path();
+        let minX = Infinity, maxX = -Infinity, has = false;
+        const mapped = [];
+        for (const o of objects) {
+          const flats = [];
+          for (const c of o.contours) {
+            const f = flattenContour(c, 2.2).map(p => ({ x: p.x * scale, y: (baselineY - p.y) * scale }));
+            if (f.length >= 3) { flats.push(f); has = true; }
+          }
+          if (!flats.length) continue;
+          for (let i = 0; i < flats.length; i++) {
+            let depth = 0;
+            for (let j = 0; j < flats.length; j++)
+              if (j !== i && pointInPoly(flats[i][0], flats[j])) depth++;
+            let pts = flats[i];
+            const want = (depth % 2 === 0) ? -1 : 1;
+            if (Math.sign(areaOf(pts)) !== want) pts = pts.slice().reverse();
+            for (const p of pts) { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; }
+            mapped.push(pts);
+          }
+        }
+        if (!has || !mapped.length) continue;
+        const shiftX = (isFinite(minX) ? minX : 0) - 8 * scale;
+        for (const pts of mapped) {
+          fontPath.moveTo(Math.round(pts[0].x - shiftX), Math.round(pts[0].y));
+          for (let i = 1; i < pts.length; i++) fontPath.lineTo(Math.round(pts[i].x - shiftX), Math.round(pts[i].y));
+          fontPath.close();
+        }
+        const width = Math.max(120, Math.round(maxX - shiftX + 24 * scale));
+        glyphs.push(new opentype.Glyph({
+          name: 'uni' + char.charCodeAt(0).toString(16).toUpperCase(),
+          unicode: char.charCodeAt(0), advanceWidth: width, path: fontPath
+        }));
+      }
+      const familyName = $('fontName').value.trim() || 'MyHandwriting';
+      return new opentype.Font({ familyName, styleName: 'Regular', unitsPerEm, ascender, descender, glyphs });
+    }
+    function updateLiveFont() {
+      try {
+        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
+        if (!drawn.length) return;
+        const font = buildOpenTypeFont();
+        const blob = new Blob([font.toArrayBuffer()], { type: 'font/ttf' });
+        if (liveFontUrl) URL.revokeObjectURL(liveFontUrl);
+        liveFontUrl = URL.createObjectURL(blob);
+        let styleTag = document.getElementById('dynamic-font-style');
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = 'dynamic-font-style';
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = @font-face { font-family: 'LiveCustomFont'; src: url('${liveFontUrl}'); };
+        livePreviewOutput.style.fontFamily = "'LiveCustomFont', Georgia, sans-serif";
+      } catch (err) { console.error('Ошибка обновления шрифта:', err); }
+    }
+    $('downloadBtn').onclick = () => {
+      try {
+        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
+        if (!drawn.length) { alert('Сначала нарисуйте хотя бы одну букву'); return; }
+        const font = buildOpenTypeFont();
+        font.download(($('fontName').value.trim() || 'MyHandwriting') + '.ttf');
+      } catch (err) {
+        console.error(err);
+        alert('Не удалось собрать шрифт: ' + (err.message || err));
       }
     };
 
-    document.getElementById('clearBtn').onclick = () => {
-      glyphData[currentChar] = [];
-      saveProject();
-      renderCanvas();
-      renderGrid();
-      updateLiveFont();
-    };
-
-    document.getElementById('clearAllBtn').onclick = () => {
+    /* ================= Прочее ================= */
+    $('saveProjectBtn').onclick = () => { saveProject(); alert('Проект сохранён в браузере'); };
+    $('clearAllBtn').onclick = () => {
       if (!confirm('Удалить все нарисованные буквы?')) return;
       Object.keys(glyphData).forEach(k => delete glyphData[k]);
-      saveProject();
-      renderCanvas();
-      renderGrid();
-      updateLiveFont();
+      Object.keys(histories).forEach(k => delete histories[k]);
+      sel = null; selNode = null;
+      saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
     };
-
-    document.getElementById('saveProjectBtn').onclick = () => {
-      saveProject();
-      alert('Проект сохранён в браузере');
-    };
-
-    brushSizeInput.oninput = () => { sizeVal.textContent = brushSizeInput.value + 'px'; };
-    brushThinningInput.oninput = () => { thinningVal.textContent = brushThinningInput.value; };
     previewInput.oninput = () => { livePreviewOutput.textContent = previewInput.value || ' '; };
-
     document.querySelectorAll('.set-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.set-btn').forEach(b => b.className = 'set-btn text-xs px-2 py-1 rounded bg-slate-700');
@@ -348,123 +1841,14 @@
       });
     });
 
-    function buildOpenTypeFont() {
-      if (typeof opentype === 'undefined') throw new Error('opentype.js не загружен');
-
-      const unitsPerEm = 1000;
-      const ascender = 800;
-      const descender = -200;
-      const baselineY = 270;
-      const scale = 1000 / 360;
-
-      const notdefGlyph = new opentype.Glyph({
-        name: '.notdef', unicode: 0, advanceWidth: 500, path: new opentype.Path()
-      });
-      const spaceGlyph = new opentype.Glyph({
-        name: 'space', unicode: 32, advanceWidth: 350, path: new opentype.Path()
-      });
-      const glyphs = [notdefGlyph, spaceGlyph];
-
-      Object.keys(glyphData).forEach(char => {
-        const strokes = glyphData[char];
-        if (!strokes || !strokes.length) return;
-
-        const fontPath = new opentype.Path();
-        let minX = Infinity;
-        let maxX = -Infinity;
-
-        const outlines = [];
-        strokes.forEach(s => {
-          const outline = getStroke(s.points, {
-            size: s.size, thinning: s.thinning, smoothing: 0.5, streamline: 0.5, last: true
-          });
-          if (outline.length < 3) return;
-          outline.forEach(([x]) => {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-          });
-          outlines.push(outline);
-        });
-        if (!outlines.length) return;
-
-        // auto left-align
-        const shiftX = (isFinite(minX) ? minX : 0) - 8;
-
-        outlines.forEach(outline => {
-          const mapped = outline.map(([x, y]) => ({
-            x: (x - shiftX) * scale,
-            y: (baselineY - y) * scale
-          }));
-          fontPath.moveTo(mapped[0].x, mapped[0].y);
-          for (let i = 1; i < mapped.length; i++) {
-            fontPath.lineTo(mapped[i].x, mapped[i].y);
-          }
-          fontPath.close();
-        });
-
-        const width = Math.max(120, Math.round(((maxX - shiftX) + 24) * scale));
-        glyphs.push(new opentype.Glyph({
-          name: 'uni' + char.charCodeAt(0).toString(16).toUpperCase(),
-          unicode: char.charCodeAt(0),
-          advanceWidth: width,
-          path: fontPath
-        }));
-      });
-
-      const familyName = document.getElementById('fontName').value.trim() || 'MyHandwriting';
-      return new opentype.Font({
-        familyName,
-        styleName: 'Regular',
-        unitsPerEm,
-        ascender,
-        descender,
-        glyphs
-      });
-    }
-
-    function updateLiveFont() {
-      try {
-        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
-        if (!drawn.length) return;
-        const font = buildOpenTypeFont();
-        const arrayBuffer = font.toArrayBuffer();
-        const blob = new Blob([arrayBuffer], { type: 'font/ttf' });
-        if (liveFontUrl) URL.revokeObjectURL(liveFontUrl);
-        liveFontUrl = URL.createObjectURL(blob);
-        let styleTag = document.getElementById('dynamic-font-style');
-        if (!styleTag) {
-          styleTag = document.createElement('style');
-          styleTag.id = 'dynamic-font-style';
-          document.head.appendChild(styleTag);
-        }
-        styleTag.textContent = `@font-face { font-family: 'LiveCustomFont'; src: url('${liveFontUrl}'); }`;
-        livePreviewOutput.style.fontFamily = "'LiveCustomFont', Georgia, sans-serif";
-      } catch (err) {
-        console.error('Ошибка обновления шрифта:', err);
-      }
-    }
-
-    document.getElementById('downloadBtn').onclick = () => {
-      try {
-        const drawn = Object.keys(glyphData).filter(k => glyphData[k] && glyphData[k].length);
-        if (!drawn.length) {
-          alert('Сначала нарисуйте хотя бы одну букву');
-          return;
-        }
-        const font = buildOpenTypeFont();
-        const name = (document.getElementById('fontName').value.trim() || 'MyHandwriting') + '.ttf';
-        font.download(name);
-      } catch (err) {
-        console.error(err);
-        alert('Не удалось собрать шрифт: ' + (err.message || err));
-      }
-    };
-
-    // init
+    /* ================= Старт ================= */
     loadProject();
+    setViewBox();
+    setTool('brush');
     renderGrid();
     renderCanvas();
     updateLiveFont();
+    updateProps();
   </script>
   <script>
     if ('serviceWorker' in navigator) {
