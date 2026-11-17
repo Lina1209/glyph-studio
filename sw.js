@@ -1,4 +1,4 @@
-const CACHE = 'glyphstudio-v1';
+const CACHE = 'glyphstudio-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -21,16 +21,28 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Страницу пробуем сначала из сети (чтобы обновления приходили сразу), кэш — запасной
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put('./index.html', copy));
+        return res;
+      }).catch(() => caches.match(e.request).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const net = fetch(e.request).then((res) => {
-        try {
-          const url = new URL(e.request.url);
-          if (res.ok && url.origin === self.location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-        } catch (_) {}
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
         return res;
       }).catch(() => cached);
       return cached || net;
