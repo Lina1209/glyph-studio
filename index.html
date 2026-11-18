@@ -1515,6 +1515,7 @@
   });
   drawSvg.addEventListener('pointermove', function (e) {
     if (modalOpen) return;
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
     var p = pos(e);
     if (tool === 'eraser') { eraserPos = p; if (!gesture) renderCanvas(); }
     if (gesture) {
