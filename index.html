@@ -1263,13 +1263,19 @@
     }
     return null;
   }
-  function hitNode(o, p, r) {
+  function hitNode(o, p, e) {
+    var rect = drawSvg.getBoundingClientRect();
+    var px = e && e.pointerType === 'touch' ? 9 : 6;
+    var radius = px * view.w / Math.max(1, rect.width), best = null, bestD = radius * radius;
+    // Если рядом несколько узлов, выбираем ближайший, а не первый в массиве.
     for (var ci = 0; ci < o.contours.length; ci++) {
       var ns = o.contours[ci].nodes;
-      for (var ni = 0; ni < ns.length; ni++)
-        if (Math.abs(p.x - ns[ni].x) < r && Math.abs(p.y - ns[ni].y) < r) return { ci: ci, ni: ni };
+      for (var ni = 0; ni < ns.length; ni++) {
+        var dx = p.x - ns[ni].x, dy = p.y - ns[ni].y, d = dx * dx + dy * dy;
+        if (d <= bestD) { bestD = d; best = { ci: ci, ni: ni }; }
+      }
     }
-    return null;
+    return best;
   }
   function hitSegment(o, p, tol) {
     var best = null, bd = tol * tol;
@@ -1420,7 +1426,13 @@
     if (so) {
       var bb = bboxOf(so.contours);
       if (bb) {
-        var h = hitHandle(p, bb, k);
+        var handleRect = drawSvg.getBoundingClientRect();
+        var bboxWidthPx = bb.w * handleRect.width / Math.max(1, view.w);
+        var bboxHeightPx = bb.h * handleRect.width / Math.max(1, view.w);
+        // У крошечного глифа ручки почти накладываются друг на друга.
+        // В этом случае касание остаётся выбором/перетаскиванием объекта.
+        var handlesUsable = bboxWidthPx >= 20 && bboxHeightPx >= 20;
+        var h = handlesUsable ? hitHandle(p, bb, k) : null;
         if (h) {
           if (selMode === 'scale') gesture = makeScale(so, bb, h, p);
           else if (h.length === 2) gesture = e.altKey ? makeDistort(so, bb, h) : makeRotate(so, bb, p);
@@ -1491,7 +1503,7 @@
           return;
         }
       }
-      var nh = hitNode(so, p, touchHitRadius(8));
+      var nh = hitNode(so, p, e);
       if (nh) {
         if (dbl && selNode && selNode.ci === nh.ci && selNode.ni === nh.ni) { toggleSmooth(so, nh); return; }
         selNode = nh;
