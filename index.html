@@ -981,30 +981,45 @@
   }
 
   function loadProject() {
+    // Treat each browser copy independently: a damaged v2 entry must not
+    // prevent recovery from the legacy entry or the IndexedDB copy.
     try {
       var raw2 = localStorage.getItem(KEY2);
       if (raw2) {
-        var d2 = JSON.parse(raw2);
-        if (d2.glyphs) for (var ch2 in d2.glyphs) {
-          var arr = d2.glyphs[ch2];
-          if (Array.isArray(arr) && arr.length && arr[0] && Array.isArray(arr[0].contours)) glyphData[ch2] = arr;
+        try {
+          var d2 = JSON.parse(raw2);
+          validateProjectBackup({
+            format: 'GlyphStudioProject', version: 1,
+            fontName: d2 && d2.fontName, glyphs: d2 && d2.glyphs
+          });
+          glyphData = clone(d2.glyphs);
+          if (d2.fontName) $('fontName').value = d2.fontName;
+          return;
+        } catch (v2Error) {
+          console.warn('Ignoring invalid local GlyphStudio v2 copy; trying recovery sources.', v2Error);
         }
-        if (d2.fontName) $('fontName').value = d2.fontName;
-        return;
       }
+    } catch (storageError) {
+      console.warn('Could not read local GlyphStudio v2 copy.', storageError);
+    }
+
+    try {
       var raw1 = localStorage.getItem(KEY1);
       if (!raw1) return;
       var d = JSON.parse(raw1);
-      if (d.fontName) $('fontName').value = d.fontName;
-      if (d.glyphs) {
+      if (d && d.fontName) $('fontName').value = d.fontName;
+      if (d && d.glyphs && typeof d.glyphs === 'object' && !Array.isArray(d.glyphs)) {
         legacy = {};
         for (var ch in d.glyphs) {
+          if (!Object.prototype.hasOwnProperty.call(d.glyphs, ch)) continue;
           var st = d.glyphs[ch];
-          if (Array.isArray(st) && st.length && st[0] && st[0].points) legacy[ch] = st;
+          if (Array.isArray(st) && st.length && st[0] && Array.isArray(st[0].points)) legacy[ch] = st;
         }
         migrateLegacy();
       }
-    } catch (e) { console.warn('load', e); }
+    } catch (legacyError) {
+      console.warn('Could not restore legacy GlyphStudio project copy.', legacyError);
+    }
   }
   var quotaWarned = false;
   var saveRevision = 0;
