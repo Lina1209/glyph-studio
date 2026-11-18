@@ -752,6 +752,7 @@
   var view = { x: 0, y: 0, w: 360 };
   var sel = null, selMode = 'scale', selNode = null;
   var gesture = null, brushPts = null, spaceDown = false, activePointerId = null;
+  var touchPointers = {}, pinchGesture = null, blockTouchUntilAllUp = false;
   var pen = { nodes: [], cursor: null, dragging: false, dragNode: null };
   var eraserR = 18, eraserPos = null, eraseChanged = false;
   var liveFontUrl = null, modalOpen = false;
@@ -1668,10 +1669,66 @@
 
   /* ================= События указателя ================= */
   drawSvg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  function cancelPointerAction() {
+    var g = gesture;
+    gesture = null;
+    if (g && g.snap) restore(g.snap);
+    brushPts = null;
+    eraseChanged = false;
+    if (pen.dragging && pen.dragNode) {
+      var pendingIndex = pen.nodes.indexOf(pen.dragNode);
+      if (pendingIndex >= 0) pen.nodes.splice(pendingIndex, 1);
+    }
+    if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
+    activePointerId = null;
+    renderCanvas();
+    updateProps();
+  }
+  function touchPointCount() { return Object.keys(touchPointers).length; }
+  function beginPinch() {
+    var ids = Object.keys(touchPointers);
+    if (ids.length < 2) return;
+    // Отменяем незавершённое рисование/редактирование перед переходом к масштабу.
+    cancelPointerAction();
+    blockTouchUntilAllUp = true;
+    var a = touchPointers[ids[0]], b = touchPointers[ids[1]];
+    var rect = drawSvg.getBoundingClientRect();
+    var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    var d = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+    pinchGesture = {
+      distance: d, width: view.w,
+      anchorX: view.x + (mx - rect.left) / rect.width * view.w,
+      anchorY: view.y + (my - rect.top) / rect.height * view.w
+    };
+  }
+  function updatePinch() {
+    if (!pinchGesture || touchPointCount() < 2) return;
+    var ids = Object.keys(touchPointers), a = touchPointers[ids[0]], b = touchPointers[ids[1]];
+    var rect = drawSvg.getBoundingClientRect();
+    var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    var d = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+    var width = Math.min(1440, Math.max(80, pinchGesture.width * pinchGesture.distance / d));
+    view.w = width;
+    view.x = pinchGesture.anchorX - (mx - rect.left) / rect.width * width;
+    view.y = pinchGesture.anchorY - (my - rect.top) / rect.height * width;
+    setViewBox();
+    queueCanvasRender();
+  }
+  drawSvg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   drawSvg.addEventListener('pointerdown', function (e) {
     if (modalOpen) return;
-    // Один активный указатель за раз: второй палец/перо не должен
-    // перезаписывать жест первого и смешивать две истории действий.
+    if (e.pointerType === 'touch') {
+      touchPointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      try { drawSvg.setPointerCapture(e.pointerId); } catch (err) {}
+      if (touchPointCount() >= 2) {
+        e.preventDefault();
+        if (!pinchGesture) beginPinch();
+        else blockTouchUntilAllUp = true;
+        return;
+      }
+      if (blockTouchUntilAllUp) { e.preventDefault(); return; }
+    }
+    // Перо и мышь не могут перезаписать активный жест другого указателя.
     if (activePointerId !== null && activePointerId !== e.pointerId) return;
     activePointerId = e.pointerId;
     e.preventDefault();
@@ -1711,6 +1768,12 @@
   });
   drawSvg.addEventListener('pointermove', function (e) {
     if (modalOpen) return;
+    if (e.pointerType === 'touch' && touchPointers[e.pointerId]) {
+      touchPointers[e.pointerId].x = e.clientX;
+      touchPointers[e.pointerId].y = e.clientY;
+      if (pinchGesture) { e.preventDefault(); updatePinch(); return; }
+      if (blockTouchUntilAllUp) return;
+    }
     if (activePointerId !== null && e.pointerId !== activePointerId) return;
     var p = pos(e);
     if (tool === 'eraser') { eraserPos = p; if (!gesture) queueCanvasRender(); }
@@ -1734,6 +1797,19 @@
     }
   });
   function pointerEnd(e) {
+    if (e && e.pointerType === 'touch') {
+      delete touchPointers[e.pointerId];
+      if (pinchGesture) {
+        if (touchPointCount() < 2) pinchGesture = null;
+        if (touchPointCount() === 0) blockTouchUntilAllUp = false;
+        activePointerId = null;
+        return;
+      }
+      if (blockTouchUntilAllUp) {
+        if (touchPointCount() === 0) blockTouchUntilAllUp = false;
+        return;
+      }
+    }
     if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
     activePointerId = null;
     if (gesture) { var g = gesture; gesture = null; g.fin(); renderCanvas(); updateProps(); }
@@ -1742,23 +1818,21 @@
   }
   drawSvg.addEventListener('pointerup', pointerEnd);
   drawSvg.addEventListener('pointercancel', function (e) {
-    if (activePointerId !== null && e.pointerId !== activePointerId) return;
-    activePointerId = null;
-    // A cancelled touch/pen gesture must not partially modify a glyph.
-    var g = gesture;
-    gesture = null;
-    if (g && g.snap) restore(g.snap);
-    brushPts = null;
-    eraseChanged = false;
-    // Перо добавляет узел сразу при pointerdown. Если браузер отменил
-    // касание до pointerup, удаляем только этот незавершённый узел.
-    if (pen.dragging && pen.dragNode) {
-      var pendingIndex = pen.nodes.indexOf(pen.dragNode);
-      if (pendingIndex >= 0) pen.nodes.splice(pendingIndex, 1);
+    if (e && e.pointerType === 'touch') {
+      delete touchPointers[e.pointerId];
+      if (pinchGesture) {
+        pinchGesture = null;
+        blockTouchUntilAllUp = touchPointCount() > 0;
+        activePointerId = null;
+        return;
+      }
+      if (blockTouchUntilAllUp) {
+        if (touchPointCount() === 0) blockTouchUntilAllUp = false;
+        return;
+      }
     }
-    if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
-    renderCanvas();
-    updateProps();
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    cancelPointerAction();
   });
   drawSvg.addEventListener('pointerleave', function (e) {
     if (tool === 'eraser') { eraserPos = null; renderCanvas(); }
