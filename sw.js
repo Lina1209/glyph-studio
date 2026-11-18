@@ -1,5 +1,5 @@
-const CACHE = 'glyphstudio-v21';
-const RUNTIME_CACHE = 'glyphstudio-runtime-v21';
+const CACHE = 'glyphstudio-v22';
+const RUNTIME_CACHE = 'glyphstudio-runtime-v22';
 const ASSETS = [
   './',
   './index.html',
