@@ -2084,14 +2084,28 @@
       }
       styleTag.textContent = "@font-face { font-family: 'LiveCustomFont'; src: url('" + liveFontUrl + "'); }";
       livePreviewOutput.style.fontFamily = "'LiveCustomFont', Georgia, sans-serif";
-    } catch (err) { console.error('Ошибка обновления шрифта:', err); }
+    } catch (err) {
+      console.error('Ошибка обновления шрифта:', err);
+      // Never leave an old preview font visible after a failed rebuild.
+      if (liveFontUrl) { URL.revokeObjectURL(liveFontUrl); liveFontUrl = null; }
+      var failedStyle = document.getElementById('dynamic-font-style');
+      if (failedStyle) failedStyle.remove();
+      livePreviewOutput.style.fontFamily = 'Georgia, sans-serif';
+    }
+  }
+  function safeFontFileName(value) {
+    var name = String(value || '').trim()
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/[. ]+$/g, '')
+      .slice(0, 64);
+    return name || 'MyHandwriting';
   }
   $('downloadBtn').onclick = function () {
     try {
       var drawn = Object.keys(glyphData).filter(function (k) { return glyphData[k] && glyphData[k].length; });
       if (!drawn.length) { alert('Сначала нарисуйте хотя бы одну букву'); return; }
       var font = buildOpenTypeFont();
-      font.download(($('fontName').value.trim() || 'MyHandwriting') + '.ttf');
+      font.download(safeFontFileName($('fontName').value) + '.ttf');
     } catch (err) {
       console.error(err);
       alert('Не удалось собрать шрифт: ' + (err.message || err));
@@ -2100,6 +2114,7 @@
 
   /* ================= Прочее ================= */
   $('saveProjectBtn').onclick = function () { saveProject(); alert('Проект сохранён в браузере'); };
+  $('fontName').addEventListener('change', saveProject);
   $('clearAllBtn').onclick = function () {
     if (!confirm('Удалить все нарисованные буквы?')) return;
     Object.keys(glyphData).forEach(function (k) { delete glyphData[k]; });
