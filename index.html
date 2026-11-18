@@ -510,18 +510,44 @@
   }
   function contoursD(cs) { return cs.map(contourD).join(' '); }
   function bboxOf(cs) {
-    var x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+    var x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    function include(p) {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      x1 = Math.min(x1, p.x); y1 = Math.min(y1, p.y);
+      x2 = Math.max(x2, p.x); y2 = Math.max(y2, p.y);
+    }
+    function extrema(p0, p1, p2, p3, axis) {
+      var a = -p0 + 3*p1 - 3*p2 + p3;
+      var b = 2*(p0 - 2*p1 + p2);
+      var c = p1 - p0, roots = [];
+      if (Math.abs(a) < 1e-12) {
+        if (Math.abs(b) > 1e-12) roots.push(-c / b);
+      } else {
+        var d = b*b - 4*a*c;
+        if (d >= 0) {
+          var sd = Math.sqrt(d);
+          roots.push((-b + sd) / (2*a), (-b - sd) / (2*a));
+        }
+      }
+      return roots.filter(function(t) { return t > 0 && t < 1; });
+    }
     for (var i = 0; i < cs.length; i++) {
-      var f = flattenContour(cs[i], 4);
-      for (var j = 0; j < f.length; j++) {
-        var p = f[j];
-        if (p.x < x1) x1 = p.x;
-        if (p.x > x2) x2 = p.x;
-        if (p.y < y1) y1 = p.y;
-        if (p.y > y2) y2 = p.y;
+      var ns = cs[i].nodes || [], n = ns.length;
+      for (var j = 0; j < n; j++) {
+        var a = ns[j], b = ns[(j + 1) % n];
+        include(a);
+        var cv = segCtrl(a, b);
+        if (!cv) { include(b); continue; }
+        var ts = extrema(a.x, cv[0].x, cv[1].x, b.x, 'x')
+          .concat(extrema(a.y, cv[0].y, cv[1].y, b.y, 'y'));
+        for (var k = 0; k < ts.length; k++) {
+          var t = ts[k];
+          include(cubicAt(a, cv[0], cv[1], b, t));
+        }
+        include(b);
       }
     }
-    if (x1 > x2) return null;
+    if (!Number.isFinite(x1) || !Number.isFinite(y1)) return null;
     return { x: x1, y: y1, x2: x2, y2: y2, w: Math.max(x2 - x1, .001), h: Math.max(y2 - y1, .001), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 };
   }
   function mapNode(n, f) {
