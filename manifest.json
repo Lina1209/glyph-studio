@@ -2,7 +2,7 @@
   "name": "GlyphStudio — Рукописные шрифты",
   "short_name": "GlyphStudio",
   "description": "Генератор рукописных шрифтов TTF прямо в браузере",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
@@ -22,5 +22,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "id": "./"
 }
