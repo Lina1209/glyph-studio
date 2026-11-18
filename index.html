@@ -122,7 +122,7 @@
         <div class="flex items-center gap-3">
           <span class="text-xs text-slate-400 uppercase tracking-wider">Редактор</span>
           <div id="currentCharLabel" class="text-2xl font-bold text-indigo-400 leading-none">А</div>
-          <span id="appStatus" class="text-[10px] text-slate-500" title="Состояние запуска редактора">⏳</span>
+          <span id="appStatus" class="text-[10px] sm:text-xs text-slate-400 bg-slate-900 border border-slate-700 rounded-md px-2 py-1 whitespace-nowrap" role="status" aria-live="polite" title="Состояние сохранения проекта">Проверка…</span>
         </div>
         <div class="flex gap-2 flex-wrap">
           <button id="undoBtn" class="pbtn" title="Отменить (Ctrl+Z)">↩ Назад</button>
@@ -871,18 +871,14 @@
     });
   }
   function queueProjectDBSave(payload) {
-    // Keep writes ordered so an older asynchronous write cannot overwrite a newer edit.
-    projectDbWriteChain = projectDbWriteChain.then(function () {
+    // Return this write's result to its caller, but keep the queue usable after a failure.
+    var task = projectDbWriteChain.then(function () {
       return writeProjectToDB(payload);
-    }).catch(function (err) {
-      console.warn('GlyphStudio IndexedDB save', err);
-      var status = $('appStatus');
-      if (status) {
-        status.textContent = '!';
-        status.title = 'Дополнительная копия IndexedDB не обновилась. Скачайте JSON.';
-      }
     });
-    return projectDbWriteChain;
+    projectDbWriteChain = task.catch(function (err) {
+      console.warn('GlyphStudio IndexedDB save', err);
+    });
+    return task;
   }
   function applyStoredProject(record) {
     if (!record || !record.glyphs || typeof record.glyphs !== 'object' || Array.isArray(record.glyphs)) return false;
@@ -946,26 +942,56 @@
     } catch (e) { console.warn('load', e); }
   }
   var quotaWarned = false;
+  var saveRevision = 0;
+  function setSaveStatus(label, title, stateClass) {
+    var status = $('appStatus');
+    if (!status) return;
+    status.textContent = label;
+    status.title = title;
+    status.dataset.state = stateClass || '';
+    status.className = 'text-[10px] sm:text-xs rounded-md px-2 py-1 whitespace-nowrap border ' +
+      (stateClass === 'saved' ? 'text-emerald-300 bg-emerald-950/50 border-emerald-800' :
+       stateClass === 'error' ? 'text-rose-300 bg-rose-950/50 border-rose-800' :
+       stateClass === 'partial' ? 'text-amber-300 bg-amber-950/50 border-amber-800' :
+       'text-slate-300 bg-slate-900 border-slate-700');
+  }
   function saveProject() {
+    var revision = ++saveRevision;
     var payload = {
       fontName: $('fontName').value,
       glyphs: clone(glyphData),
       savedAt: new Date().toISOString()
     };
-    // IndexedDB is maintained as a second copy; localStorage remains the
-    // synchronous compatibility/migration layer for older app versions.
-    queueProjectDBSave(payload);
+    var localSaved = false;
+    setSaveStatus('Сохранение…', 'Обновляются локальная копия и дополнительная копия IndexedDB.', 'pending');
     try {
+      // Keep localStorage as the synchronous compatibility layer for older versions.
       localStorage.setItem(KEY2, JSON.stringify(payload));
-      return true;
+      localSaved = true;
     } catch (e) {
       if (!quotaWarned) {
         quotaWarned = true;
-        alert('Не удалось сохранить основную копию в браузере (возможно, закончилось место). Дополнительное сохранение в IndexedDB выполняется. На всякий случай скачайте резервную копию кнопкой «⬇️ JSON».');
+        alert('Не удалось сохранить основную копию в браузере (возможно, закончилось место). Проверяется дополнительное сохранение в IndexedDB. Скачайте резервную копию кнопкой «⬇️ JSON».');
       }
       console.warn('saveProject localStorage', e);
-      return false;
     }
+    queueProjectDBSave(payload).then(function () {
+      if (revision !== saveRevision) return;
+      if (localSaved) {
+        setSaveStatus('Сохранено', 'Проект записан в localStorage и IndexedDB.', 'saved');
+      } else {
+        setSaveStatus('Копия IDB', 'Основная копия localStorage недоступна; проект записан в IndexedDB. Скачайте JSON.', 'partial');
+      }
+    }).catch(function (err) {
+      console.warn('saveProject IndexedDB', err);
+      if (revision !== saveRevision) return;
+      if (localSaved) {
+        setSaveStatus('Частично', 'localStorage обновлён, но IndexedDB не обновилась. Скачайте JSON.', 'partial');
+      } else {
+        setSaveStatus('Ошибка', 'Не удалось обновить ни localStorage, ни IndexedDB. Немедленно скачайте JSON.', 'error');
+      }
+    });
+    return localSaved;
   }
 
   /* ================= Вид ================= */
@@ -2690,8 +2716,6 @@
     renderCanvas();
     updateLiveFont();
     saveProject();
-    $('appStatus').textContent = '✔';
-    $('appStatus').title = 'Редактор запущен; резервная копия IndexedDB обновляется автоматически';
     loadEngine(0);
   }
   try {
