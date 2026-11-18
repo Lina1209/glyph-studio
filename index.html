@@ -1225,11 +1225,24 @@
     var rect = drawSvg.getBoundingClientRect();
     return Math.max(baseUnits * view.w / 360, 16 * view.w / Math.max(1, rect.width));
   }
-  function hitHandle(p, bb, k) {
-    var hs = handlePts(bb), radius = touchHitRadius(8);
-    for (var i = 0; i < hs.length; i++)
-      if (Math.abs(p.x - hs[i][1]) < radius && Math.abs(p.y - hs[i][2]) < radius) return hs[i][0];
-    return null;
+  function hitHandle(p, bb, e) {
+    var rect = drawSvg.getBoundingClientRect();
+    var px = e && e.pointerType === 'touch' ? 10 : 6;
+    var radius = px * view.w / Math.max(1, rect.width), radius2 = radius * radius;
+    var widthPx = bb.w * rect.width / Math.max(1, view.w);
+    var heightPx = bb.h * rect.width / Math.max(1, view.w);
+    // На очень узкой фигуре оставляем ручки вдоль её длинной оси:
+    // они не накладываются друг на друга и позволяют менять размер.
+    if (widthPx < 20 && heightPx < 20) return null;
+    var hs = handlePts(bb), best = null, bestD = radius2;
+    for (var i = 0; i < hs.length; i++) {
+      var name = hs[i][0];
+      if (widthPx < 20 && name !== 'n' && name !== 's') continue;
+      if (heightPx < 20 && name !== 'e' && name !== 'w') continue;
+      var dx = p.x - hs[i][1], dy = p.y - hs[i][2], d = dx * dx + dy * dy;
+      if (d <= bestD) { bestD = d; best = name; }
+    }
+    return best;
   }
   function hitObject(p, k, e) {
     var list = objs(), rect = drawSvg.getBoundingClientRect();
@@ -1426,13 +1439,7 @@
     if (so) {
       var bb = bboxOf(so.contours);
       if (bb) {
-        var handleRect = drawSvg.getBoundingClientRect();
-        var bboxWidthPx = bb.w * handleRect.width / Math.max(1, view.w);
-        var bboxHeightPx = bb.h * handleRect.width / Math.max(1, view.w);
-        // У крошечного глифа ручки почти накладываются друг на друга.
-        // В этом случае касание остаётся выбором/перетаскиванием объекта.
-        var handlesUsable = bboxWidthPx >= 20 && bboxHeightPx >= 20;
-        var h = handlesUsable ? hitHandle(p, bb, k) : null;
+        var h = hitHandle(p, bb, e);
         if (h) {
           if (selMode === 'scale') gesture = makeScale(so, bb, h, p);
           else if (h.length === 2) gesture = e.altKey ? makeDistort(so, bb, h) : makeRotate(so, bb, p);
