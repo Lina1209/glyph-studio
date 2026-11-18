@@ -122,7 +122,7 @@
         <div class="flex items-center gap-3">
           <span class="text-xs text-slate-400 uppercase tracking-wider">Редактор</span>
           <div id="currentCharLabel" class="text-2xl font-bold text-indigo-400 leading-none">А</div>
-          <span id="appStatus" class="text-[10px] sm:text-xs text-slate-400 bg-slate-900 border border-slate-700 rounded-md px-2 py-1 whitespace-nowrap" role="status" aria-live="polite" title="Состояние сохранения проекта">Проверка…</span>
+          <span id="appStatus" class="text-[10px] sm:text-xs text-slate-400 bg-slate-900 border border-slate-700 rounded-md px-2 py-1 whitespace-nowrap" role="status" aria-live="polite" title="При запуске проверяются обе копии проекта">Проверка…</span>
         </div>
         <div class="flex gap-2 flex-wrap">
           <button id="undoBtn" class="pbtn" title="Отменить (Ctrl+Z)">↩ Назад</button>
@@ -849,8 +849,13 @@
       return new Promise(function (resolve, reject) {
         var tx = db.transaction('projects', 'readonly');
         var request = tx.objectStore('projects').get('current');
-        request.onsuccess = function () { resolve(request.result || null); };
+        var record = null;
+        request.onsuccess = function () { record = request.result || null; };
         request.onerror = function () { reject(request.error || new Error('Не удалось прочитать IndexedDB')); };
+        // Resolve only after the read transaction itself has completed successfully.
+        tx.oncomplete = function () { resolve(record); };
+        tx.onerror = function () { reject(tx.error || new Error('Ошибка транзакции чтения IndexedDB')); };
+        tx.onabort = function () { reject(tx.error || new Error('Чтение IndexedDB отменено')); };
       });
     });
   }
@@ -899,13 +904,15 @@
   function restoreNewerIndexedDBCopy() {
     return readProjectFromDB().then(function (record) {
       if (!record) return false;
-      var localSavedAt = '';
+      var localSavedAt = 0;
       try {
         var local = JSON.parse(localStorage.getItem(KEY2) || 'null');
-        localSavedAt = local && local.savedAt || '';
+        var localTime = local && Date.parse(local.savedAt);
+        if (Number.isFinite(localTime)) localSavedAt = localTime;
       } catch (e) {}
-      var dbSavedAt = record.savedAt || '';
-      if (dbSavedAt && (!localSavedAt || dbSavedAt > localSavedAt)) {
+      var dbTime = Date.parse(record.savedAt || '');
+      // Ignore records without a valid timestamp; never replace a known newer local copy.
+      if (Number.isFinite(dbTime) && dbTime > localSavedAt) {
         return applyStoredProject(record);
       }
       return false;
