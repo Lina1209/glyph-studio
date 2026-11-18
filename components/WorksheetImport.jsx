@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { scanWorksheetFile, SHEET_PAGES, downloadWorksheetSvg } from '../lib/worksheet.js';
 
 export default function WorksheetImport({ onImport, onPrint }) {
@@ -9,24 +9,43 @@ export default function WorksheetImport({ onImport, onPrint }) {
   const [note, setNote] = useState('');
   const [threshold, setThreshold] = useState(128);
 
+  // Release temporary object URLs when the selected image changes or the panel unmounts.
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
   const chooseFile = event => {
     const next = event.target.files?.[0] || null;
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setFile(next); setPreviewUrl(next ? URL.createObjectURL(next) : ''); setNote('');
+    setFile(next);
+    setPreviewUrl(next ? URL.createObjectURL(next) : '');
+    setNote('');
+    // Allow choosing the same file again after clearing/replacing it.
+    event.target.value = '';
   };
+
   const importPage = async () => {
     if (!file) { setNote('Сначала выберите фото или скан бланка.'); return; }
-    setBusy(true); setNote('Ищу угловые метки и распознаю символы…');
+    if (typeof onImport !== 'function') {
+      setNote('Импорт не подключён к редактору: обработчик onImport не передан.');
+      return;
+    }
+    setBusy(true);
+    setNote('Ищу угловые метки и распознаю символы…');
     try {
       const result = await scanWorksheetFile(file, page, { threshold });
-      onImport(result);
+      await onImport(result);
       const parts = [`Импортировано символов: ${result.glyphs.length}.`];
-      parts.push(result.aligned ? `Лист выровнен по меткам (${result.marksFound}/4).` : 'Метки не найдены — использовано растяжение на весь лист; точность может быть ниже.');
+      parts.push(result.aligned
+        ? `Лист выровнен по меткам (${result.marksFound}/4).`
+        : 'Метки не найдены — использовано масштабирование всего листа; точность может быть ниже.');
       if (result.skipped?.length) parts.push(`Пропущены пустые/нечитаемые ячейки: ${result.skipped.join(' ')}.`);
-      parts.push('Проверьте каждый знак в библиотеке — можно дорисовать пером поверх.');
+      parts.push('Проверьте каждый знак в библиотеке — при необходимости дорисуйте его.');
       setNote(parts.join(' '));
-    } catch (error) { setNote(error.message || 'Не удалось обработать изображение.'); }
-    finally { setBusy(false); }
+    } catch (error) {
+      setNote(error?.message || 'Не удалось обработать изображение.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return <section className="panel worksheet-panel">
@@ -40,6 +59,6 @@ export default function WorksheetImport({ onImport, onPrint }) {
     {previewUrl && <img className="worksheet-preview" src={previewUrl} alt="Предпросмотр загруженного скана"/>}
     <button className="button full primary" type="button" disabled={busy || !file} onClick={importPage}>{busy ? 'Обработка…' : '⇧ Распознать страницу'}</button>
     {note && <p className="worksheet-note" role="status">{note}</p>}
-    <small className="worksheet-warning">Символ привязывается к букве своей ячейки автоматически. Снимайте страницу целиком, ровно и при хорошем свете. Импортированные контуры можно править пером и ластиком в редакторе.</small>
+    <small className="worksheet-warning">Символ привязывается к букве своей ячейки автоматически. Снимайте страницу целиком, ровно и при хорошем свете. Импортированные контуры требуют проверки перед экспортом.</small>
   </section>;
 }
