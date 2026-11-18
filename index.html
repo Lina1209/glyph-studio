@@ -336,8 +336,9 @@
         <h3 class="font-semibold text-slate-200">📥 Вставить в редактор</h3>
         <button id="modalClose" class="pbtn">✕</button>
       </div>
-      <div class="flex gap-1">
+      <div class="flex gap-1 flex-wrap">
         <button class="tab-btn active" data-tab="symbol">Символ</button>
+        <button class="tab-btn" data-tab="library">✦ Библиотека</button>
         <button class="tab-btn" data-tab="png">PNG / JPG</button>
         <button class="tab-btn" data-tab="svg">SVG</button>
       </div>
@@ -357,6 +358,19 @@
             <span id="symFontName" class="text-[11px] text-emerald-400"></span>
           </div>
           <p class="text-[10px] text-slate-500 mt-2">Из файла шрифта контур берётся точно, из системного шрифта — обводится автоматически.</p>
+        </div>
+
+        <div id="tabLibrary" class="hidden">
+          <p class="text-xs text-slate-400 mb-2">Выберите заготовку. Она будет построена из выбранного выше шрифта и превращена в редактируемые векторные контуры.</p>
+          <div class="flex flex-wrap gap-1.5 mb-3">
+            <button type="button" class="lib-set pbtn !text-xs" data-lib-set="latin">Латиница</button>
+            <button type="button" class="lib-set pbtn !text-xs" data-lib-set="cyrillic">Кириллица</button>
+            <button type="button" class="lib-set pbtn !text-xs" data-lib-set="digits">Цифры</button>
+            <button type="button" class="lib-set pbtn !text-xs" data-lib-set="punct">Знаки</button>
+            <button type="button" class="lib-set pbtn !text-xs" data-lib-set="decor">Декор</button>
+          </div>
+          <div id="symbolLibraryGrid" class="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto"></div>
+          <p class="text-[10px] text-slate-500 mt-2">После вставки можно менять узлы, кривые, размер и форму. Доступность конкретного знака зависит от выбранного системного шрифта.</p>
         </div>
 
         <div id="tabPng" class="hidden">
@@ -2257,10 +2271,51 @@
     importTab = t;
     document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === t); });
     $('tabSymbol').classList.toggle('hidden', t !== 'symbol');
+    $('tabLibrary').classList.toggle('hidden', t !== 'library');
     $('tabPng').classList.toggle('hidden', t !== 'png');
     $('tabSvg').classList.toggle('hidden', t !== 'svg');
+    if (t === 'library') renderSymbolLibrary();
     regenPreview();
   }
+  var symbolLibrarySets = {
+    latin: Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'),
+    cyrillic: Array.from('АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'),
+    digits: Array.from('0123456789'),
+    punct: Array.from('.,;:!?…—–-()[]{}«»„“”\'"/\\@#&%+*=<>№$€£¥'),
+    decor: Array.from('★ ☆ ✦ ✧ ✿ ❀ ♥ ♡ ◆ ◇ ● ○ ■ □ ▲ △ → ← ↑ ↓ ∞ ✓ ✕')
+  };
+  var activeLibrarySet = 'latin';
+  function renderSymbolLibrary() {
+    var grid = $('symbolLibraryGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    document.querySelectorAll('[data-lib-set]').forEach(function (b) {
+      b.classList.toggle('!bg-indigo-600', b.dataset.libSet === activeLibrarySet);
+    });
+    (symbolLibrarySets[activeLibrarySet] || []).forEach(function (ch) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = ch;
+      b.title = 'Выбрать «' + ch + '»';
+      b.className = 'h-10 rounded-md border border-slate-700 bg-slate-950 text-slate-100 text-lg hover:bg-indigo-700';
+      b.style.fontFamily = famSel.value === '__custom__' ? 'inherit' : famSel.value;
+      b.onclick = function () {
+        $('symChar').value = ch;
+        switchTab('symbol');
+        regenPreview();
+      };
+      grid.appendChild(b);
+    });
+  }
+  document.querySelectorAll('[data-lib-set]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      activeLibrarySet = b.dataset.libSet;
+      renderSymbolLibrary();
+    });
+  });
+  $('symFamily').addEventListener('change', function () {
+    if (importTab === 'library') renderSymbolLibrary();
+  });
   $('importBtn').onclick = function () { openModal('symbol'); };
   $('modalClose').onclick = closeModal;
   $('cancelImportBtn').onclick = closeModal;
