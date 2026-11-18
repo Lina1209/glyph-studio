@@ -398,7 +398,21 @@
           var p = cubicAt(A, cv[0], cv[1], B, j / k);
           pts.push({ x: p.x, y: p.y, seg: i, t: j / k });
         }
-      } else pts.push({ x: B.x, y: B.y, seg: (i + 1) % n, t: 0 });
+      } else {
+        // Прямые сегменты тоже разбиваем на отрезки: это нужно для точного
+        // попадания ластика и добавления узла в середину прямой линии.
+        var lineLength = dist(A, B);
+        var lineSteps = Math.max(1, Math.min(40, Math.ceil(lineLength / step)));
+        for (var lj = 1; lj <= lineSteps; lj++) {
+          var lt = lj / lineSteps;
+          pts.push({
+            x: A.x + (B.x - A.x) * lt,
+            y: A.y + (B.y - A.y) * lt,
+            seg: i,
+            t: lt
+          });
+        }
+      }
     }
     pts.pop();
     return pts;
