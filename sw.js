@@ -1,5 +1,5 @@
-const CACHE = 'glyphstudio-v31';
-const RUNTIME_CACHE = 'glyphstudio-runtime-v31';
+const CACHE = 'glyphstudio-v32';
+const RUNTIME_CACHE = 'glyphstudio-runtime-v1';
 const ASSETS = [
   './',
   './index.html',
@@ -30,13 +30,28 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
+    caches.keys().then(async keys => {
+      // Keep previously downloaded CDN libraries when the app shell is updated.
+      // Otherwise an update performed online could remove the only offline copy
+      // of Tailwind, opentype.js or the brush engine.
+      const runtime = await caches.open(RUNTIME_CACHE);
+      const oldRuntimeCaches = keys.filter(key =>
+        key.startsWith('glyphstudio-runtime-') && key !== RUNTIME_CACHE
+      );
+      for (const oldName of oldRuntimeCaches) {
+        const oldCache = await caches.open(oldName);
+        for (const request of await oldCache.keys()) {
+          if (await runtime.match(request)) continue;
+          const response = await oldCache.match(request);
+          if (response) await runtime.put(request, response);
+        }
+      }
+      await Promise.all(
         keys.filter(key => key.startsWith('glyphstudio-') &&
           key !== CACHE && key !== RUNTIME_CACHE)
           .map(key => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
