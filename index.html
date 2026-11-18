@@ -304,7 +304,8 @@
           <select id="worksheetPage" class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm" disabled><option>Загрузка…</option></select>
         </label>
         <label class="text-xs text-slate-300">Фото или скан
-          <input id="worksheetFile" type="file" accept="image/png,image/jpeg,image/webp" class="block w-full mt-1 text-xs text-slate-300 file:bg-indigo-600 file:text-white file:border-0 file:rounded file:px-2 file:py-1.5"/>
+          <input id="worksheetFile" type="file" multiple accept="image/png,image/jpeg,image/webp" class="block w-full mt-1 text-xs text-slate-300 file:bg-indigo-600 file:text-white file:border-0 file:rounded file:px-2 file:py-1.5"/>
+          <span class="block mt-1 text-[10px] text-slate-500">Можно выбрать сразу до 7 фотографий. Порядок выбора = страницы 1–7.</span>
         </label>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
@@ -321,7 +322,9 @@
         <button id="worksheetRecognizeBtn" type="button" class="pbtn !bg-indigo-600 !border-indigo-500 !py-2" disabled>⇧ Распознать и добавить в библиотеку</button>
         <span id="worksheetResult" class="text-xs text-slate-300" aria-live="polite"></span>
       </div>
-      <img id="worksheetPreview" class="hidden mt-4 max-h-72 max-w-full rounded-lg border border-slate-600 bg-white object-contain" alt="Предпросмотр загруженного бланка"/>
+      <div id="worksheetQueue" class="hidden mt-3 rounded-lg border border-slate-700 p-2 text-xs text-slate-300"></div>
+      <button id="worksheetClearBtn" type="button" class="pbtn !py-1.5 mt-2" disabled>Очистить загруженные файлы</button>
+      <img id="worksheetPreview" class="hidden mt-4 max-h-72 max-w-full rounded-lg border border-slate-600 bg-white object-contain" alt="Предпросмотр первого загруженного бланка"/>
       <p class="text-[10px] text-slate-500 mt-3">Важно: чёрные угловые метки должны полностью попасть на фото. Результат распознавания нужно проверить в редакторе — качество зависит от освещения, контраста и ровности снимка.</p>
     </div>
   </section>
@@ -3139,7 +3142,7 @@
   };
   previewInput.oninput = function () { livePreviewOutput.textContent = previewInput.value || ' '; };
   /* ================= Импорт рукописного бланка ================= */
-  var worksheetApi = null, worksheetFile = null, worksheetPreviewUrl = null;
+  var worksheetApi = null, worksheetFiles = [], worksheetPreviewUrl = null;
   var worksheetApiPromise = import('./lib/worksheet.js').then(function (api) {
     worksheetApi = api;
     var select = $('worksheetPage');
@@ -3151,7 +3154,7 @@
       select.appendChild(option);
     });
     select.disabled = false;
-    $('worksheetRecognizeBtn').disabled = !worksheetFile;
+    $('worksheetRecognizeBtn').disabled = !worksheetFiles.length;
     $('worksheetStatus').textContent = '✔ Модуль подключён · ' + api.WORKSHEET_CHARS.length + ' символов';
     return api;
   }).catch(function (err) {
@@ -3164,25 +3167,45 @@
   $('worksheetThreshold').addEventListener('input', function () {
     $('worksheetThresholdVal').textContent = $('worksheetThreshold').value;
   });
-  $('worksheetFile').addEventListener('change', function (event) {
-    var file = event.target.files && event.target.files[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!/^image\/(png|jpeg|webp)$/i.test(file.type)) {
-      $('worksheetResult').textContent = 'Выберите изображение PNG, JPG или WebP.';
+  function renderWorksheetQueue() {
+    var box = $('worksheetQueue'); box.innerHTML = '';
+    if (!worksheetFiles.length) {
+      box.classList.add('hidden'); $('worksheetClearBtn').disabled = true;
+      $('worksheetRecognizeBtn').disabled = true; $('worksheetPreview').classList.add('hidden');
+      if (worksheetPreviewUrl) { URL.revokeObjectURL(worksheetPreviewUrl); worksheetPreviewUrl = null; }
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      $('worksheetResult').textContent = 'Файл слишком большой. Максимальный размер — 20 МБ.';
-      return;
-    }
-    worksheetFile = file;
-    if (worksheetPreviewUrl) URL.revokeObjectURL(worksheetPreviewUrl);
-    worksheetPreviewUrl = URL.createObjectURL(file);
-    $('worksheetPreview').src = worksheetPreviewUrl;
-    $('worksheetPreview').classList.remove('hidden');
+    box.classList.remove('hidden'); $('worksheetClearBtn').disabled = false;
     $('worksheetRecognizeBtn').disabled = !worksheetApi;
-    $('worksheetResult').textContent = 'Файл загружен: ' + file.name;
+    var title = document.createElement('div'); title.className = 'font-semibold mb-2';
+    title.textContent = 'Загружено страниц: ' + worksheetFiles.length + ' из 7'; box.appendChild(title);
+    worksheetFiles.forEach(function(file,index) {
+      var row=document.createElement('div'); row.className='flex items-center justify-between gap-2 py-1 border-t border-slate-700';
+      var label=document.createElement('span'); label.className='min-w-0 truncate';
+      label.textContent='Страница '+(index+1)+': '+file.name;
+      var remove=document.createElement('button'); remove.type='button'; remove.className='shrink-0 rounded bg-slate-700 px-2 py-1'; remove.textContent='Удалить';
+      remove.addEventListener('click',function(){ worksheetFiles.splice(index,1); renderWorksheetQueue(); $('worksheetResult').textContent='Файл удалён из очереди.'; });
+      row.appendChild(label); row.appendChild(remove); box.appendChild(row);
+    });
+    if (worksheetPreviewUrl) URL.revokeObjectURL(worksheetPreviewUrl);
+    worksheetPreviewUrl=URL.createObjectURL(worksheetFiles[0]); $('worksheetPreview').src=worksheetPreviewUrl;
+    $('worksheetPreview').classList.remove('hidden');
+  }
+  $('worksheetFile').addEventListener('change',function(event) {
+    var selected=Array.from(event.target.files||[]); event.target.value='';
+    if(!selected.length)return;
+    var valid=selected.filter(function(file){
+      if(!/^image\\/(png|jpeg|webp)$/i.test(file.type)){ $('worksheetResult').textContent='Неподдерживаемый формат: '+file.name; return false; }
+      if(file.size>20*1024*1024){ $('worksheetResult').textContent='Файл больше 20 МБ: '+file.name; return false; }
+      return true;
+    });
+    if(worksheetFiles.length+valid.length>7){ $('worksheetResult').textContent='Можно загрузить не более семи страниц.'; return; }
+    worksheetFiles=worksheetFiles.concat(valid); renderWorksheetQueue();
+    $('worksheetResult').textContent='Добавлено файлов: '+valid.length+'. Всего: '+worksheetFiles.length+'. Порядок выбора соответствует страницам бланка.';
+  });
+  $('worksheetClearBtn').addEventListener('click',function(){
+    worksheetFiles=[]; renderWorksheetQueue();
+    $('worksheetResult').textContent='Очередь очищена. Уже распознанные глифы в библиотеке сохранены.';
   });
   $('worksheetPrintBtn').addEventListener('click', function () {
     // Open synchronously from the user gesture so mobile browsers do not block the print tab.
@@ -3198,66 +3221,62 @@
     worksheetApiPromise.then(function (api) { api.downloadWorksheetSvg(Number($('worksheetPage').value || 0)); })
       .catch(function (err) { $('worksheetResult').textContent = err.message || String(err); });
   });
-  $('worksheetRecognizeBtn').addEventListener('click', async function () {
-    if (!worksheetFile || !worksheetApi || this.disabled) return;
-    var button = this;
-    button.disabled = true;
-    $('worksheetResult').textContent = 'Распознаю символы… Не закрывайте страницу.';
-    try {
-      var result = await worksheetApi.scanWorksheetFile(worksheetFile, Number($('worksheetPage').value || 0), {
-        threshold: Number($('worksheetThreshold').value)
-      });
-      if (!result || !Array.isArray(result.glyphs)) {
-        throw new Error('Распознавание вернуло некорректный список символов.');
+  $('worksheetRecognizeBtn').addEventListener('click',async function(){
+    if(!worksheetFiles.length||!worksheetApi||this.disabled)return;
+    var button=this; button.disabled=true;
+    $('worksheetResult').textContent='Распознаю '+worksheetFiles.length+' страниц…';
+    try{
+      var firstPage=Number($('worksheetPage').value||0);
+      if(firstPage+worksheetFiles.length>worksheetApi.SHEET_PAGES.length)
+        throw new Error('Для выбранной начальной страницы не хватает страниц. Выберите более раннюю страницу или загрузите меньше файлов.');
+      var glyphs=[], skipped=[], aligned=[];
+      for(var pi=0;pi<worksheetFiles.length;pi++){
+        $('worksheetResult').textContent='Распознаю страницу '+(firstPage+pi+1)+'…';
+        var pageResult=await worksheetApi.scanWorksheetFile(worksheetFiles[pi],firstPage+pi,{threshold:Number($('worksheetThreshold').value)});
+        if(!pageResult||!Array.isArray(pageResult.glyphs))throw new Error('Некорректный результат страницы '+(firstPage+pi+1)+'.');
+        glyphs=glyphs.concat(pageResult.glyphs); skipped=skipped.concat(pageResult.skipped||[]); aligned.push(pageResult.aligned);
       }
-      var replace = $('worksheetReplace').checked;
-      var imported = [], skippedExisting = [], staged = [], seenChars = Object.create(null);
-      // Prepare and validate every glyph before changing the library. A bad
-      // contour must not leave a half-imported worksheet in memory.
-      result.glyphs.forEach(function (glyph) {
-        if (!glyph || typeof glyph.char !== 'string' || !glyph.char ||
-            Array.from(glyph.char).length > 2 || !Array.isArray(glyph.outlines)) {
-          throw new Error('В распознанном листе обнаружен некорректный символ.');
-        }
-        var ch = glyph.char;
-        if (seenChars[ch]) throw new Error('Символ «' + ch + '» встретился в листе повторно.');
-        seenChars[ch] = true;
-        if (!replace && glyphData[ch] && glyphData[ch].length) {
-          skippedExisting.push(ch);
-          return;
-        }
-        var contours = glyph.outlines.map(function (outline) {
-          if (!Array.isArray(outline)) throw new Error('Некорректный контур символа «' + ch + '».');
-          var points = outline.map(function (p) {
-            if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
-              throw new Error('Некорректные координаты символа «' + ch + '».');
-            }
-            return [p.x * 0.36, 270 - p.y * 0.36];
+      var replace=$('worksheetReplace').checked, imported=[], skippedExisting=[], staged=[], seen=Object.create(null);
+      glyphs.forEach(function(glyph){
+        if(!glyph||typeof glyph.char!=='string'||!glyph.char||Array.from(glyph.char).length>2||!Array.isArray(glyph.outlines))
+          throw new Error('В наборе обнаружен некорректный символ.');
+        var ch=glyph.char;
+        if(seen[ch])throw new Error('Символ «'+ch+'» встретился повторно. Проверьте порядок страниц.');
+        seen[ch]=true;
+        if(!replace&&glyphData[ch]&&glyphData[ch].length){skippedExisting.push(ch);return;}
+        var contours=glyph.outlines.map(function(outline){
+          if(!Array.isArray(outline))throw new Error('Некорректный контур символа «'+ch+'».');
+          var points=outline.map(function(p){
+            if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))throw new Error('Некорректные координаты символа «'+ch+'».');
+            return [p.x*.36,270-p.y*.36];
           });
           return outlineToContour(points);
-        }).filter(function (contour) { return contour.nodes.length >= 3; });
-        if (!contours.length) return;
-        normalizeContours(contours, 1);
-        staged.push({ char: ch, contours: contours });
+        }).filter(function(c){return c.nodes.length>=3;});
+        if(contours.length){normalizeContours(contours,1);staged.push({char:ch,contours:contours});}
       });
-      // Apply only after the complete worksheet has passed validation.
-      staged.forEach(function (item) {
-        var ch = item.char;
-        var previous = clone(glyphData[ch] || []);
-        var history = histories[ch] || (histories[ch] = { u: [], r: [] });
-        pushHistory(history.u, previous);
-        history.r = [];
-        glyphData[ch] = [{ id: uid(), contours: item.contours }];
-        edited[ch] = true;
-        imported.push(ch);
+      staged.forEach(function(item){
+        var ch=item.char, previous=clone(glyphData[ch]||[]), history=histories[ch]||(histories[ch]={u:[],r:[]});
+        pushHistory(history.u,previous);history.r=[];
+        glyphData[ch]=[{id:uid(),contours:item.contours}];edited[ch]=true;imported.push(ch);
       });
-      saveProject();
-      renderGrid();
-      updateLiveFont();
-      if (imported.length) {
-        currentChar = imported[0];
-        visibleChars = SETS.all;
-        document.querySelectorAll('.set-btn').forEach(function (btn) {
+      saveProject();renderGrid();updateLiveFont();
+      if(imported.length){
+        currentChar=imported[0];visibleChars=SETS.all;
+        document.querySelectorAll('.set-btn').forEach(function(btn){
+          btn.className=btn.dataset.set==='all'?'set-btn text-xs px-2 py-1 rounded bg-indigo-600':'set-btn text-xs px-2 py-1 rounded bg-slate-700';
+        });
+        sel=null;selNode=null;pen.nodes=[];$('currentCharLabel').textContent=currentChar;
+        renderCanvas();updateProps();renderGrid();
+      }
+      var parts=['Обработано страниц: '+worksheetFiles.length+'. Добавлено глифов: '+imported.length+'.'];
+      if(skippedExisting.length)parts.push('Уже существовали и не заменены: '+skippedExisting.join(' ')+'.');
+      if(skipped.length)parts.push('Пустые ячейки: '+skipped.join(' ')+'.');
+      parts.push(aligned.every(Boolean)?'Все страницы выровнены по четырём меткам.':'На некоторых страницах не удалось подтвердить выравнивание.');
+      $('worksheetResult').textContent=parts.join(' ');
+    }catch(err){$('worksheetResult').textContent='Ошибка распознавания: '+(err.message||String(err));}
+    finally{button.disabled=!worksheetFiles.length;}
+  });
+  document.querySelectorAll('.set-btn').forEach(function (btn) {
           btn.className = btn.dataset.set === 'all'
             ? 'set-btn text-xs px-2 py-1 rounded bg-indigo-600'
             : 'set-btn text-xs px-2 py-1 rounded bg-slate-700';
