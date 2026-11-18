@@ -2848,11 +2848,20 @@
   });
 
   $('clearAllBtn').onclick = function () {
-    if (!confirm('Удалить все нарисованные буквы?')) return;
-    Object.keys(glyphData).forEach(function (k) { delete glyphData[k]; });
-    Object.keys(histories).forEach(function (k) { delete histories[k]; });
-    legacy = null; edited = {};
-    sel = null; selNode = null;
+    if (!confirm('Очистить все нарисованные символы? Для восстановления используйте Undo отдельно на каждом символе.')) return;
+    // Preserve one pre-clear snapshot per character so clearing the whole
+    // project does not silently destroy the user's undo history.
+    Object.keys(glyphData).forEach(function (k) {
+      var previous = glyphData[k];
+      if (!Array.isArray(previous) || !previous.length) return;
+      var history = histories[k] || (histories[k] = { u: [], r: [] });
+      pushHistory(history.u, clone(previous));
+      history.r = [];
+      edited[k] = true;
+      delete glyphData[k];
+    });
+    legacy = null;
+    sel = null; selNode = null; pen.nodes = [];
     saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
   };
   previewInput.oninput = function () { livePreviewOutput.textContent = previewInput.value || ' '; };
