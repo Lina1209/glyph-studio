@@ -981,9 +981,20 @@
       var localSavedAt = 0;
       try {
         var local = JSON.parse(localStorage.getItem(KEY2) || 'null');
-        var localTime = local && Date.parse(local.savedAt);
-        if (Number.isFinite(localTime)) localSavedAt = localTime;
-      } catch (e) {}
+        // A timestamp is trusted only when the local copy itself passes the
+        // same structural validation as a project backup. Otherwise a damaged
+        // newer entry could block recovery from a valid IndexedDB snapshot.
+        if (local) {
+          validateProjectBackup({
+            format: 'GlyphStudioProject', version: 1,
+            fontName: local.fontName, glyphs: local.glyphs
+          });
+          var localTime = Date.parse(local.savedAt || '');
+          if (Number.isFinite(localTime)) localSavedAt = localTime;
+        }
+      } catch (e) {
+        localSavedAt = 0;
+      }
       var dbTime = Date.parse(record.savedAt || '');
       // Ignore records without a valid timestamp; never replace a known newer local copy.
       if (Number.isFinite(dbTime) && dbTime > localSavedAt) {
