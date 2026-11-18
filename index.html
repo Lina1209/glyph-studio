@@ -273,7 +273,11 @@
         <div id="livePreviewOutput" class="inline-block whitespace-nowrap break-normal text-3xl sm:text-5xl leading-none"
              style="font-family:'LiveCustomFont',Georgia,sans-serif;">ПРИВЕТ</div>
       </div>
-      <p class="text-[11px] text-slate-400 mt-3 text-center">Ненарисованные буквы — обычным шрифтом.</p>
+      <div class="flex items-center justify-between gap-2 mt-3">
+         <p class="text-[11px] text-slate-400">Ненарисованные буквы — обычным шрифтом.</p>
+         <button id="copyPreviewBtn" type="button" class="pbtn !py-1.5 text-xs shrink-0">Копировать текст</button>
+       </div>
+       <p id="copyPreviewStatus" class="text-[11px] text-emerald-400 min-h-[1rem]" aria-live="polite"></p>
       <button id="clearAllBtn" class="mt-3 text-xs text-rose-400 hover:text-rose-300 underline">Очистить весь проект</button>
     </section>
   </main>
@@ -3143,6 +3147,32 @@
     saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
   };
   previewInput.oninput = function () { livePreviewOutput.textContent = previewInput.value || ' '; };
+  $('copyPreviewBtn').addEventListener('click', async function () {
+    var value = previewInput.value || '';
+    if (!value) {
+      $('copyPreviewStatus').textContent = 'Сначала введите текст для копирования.';
+      return;
+    }
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        var helper = document.createElement('textarea');
+        helper.value = value;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        var copied = document.execCommand('copy');
+        helper.remove();
+        if (!copied) throw new Error('Копирование не поддерживается этим браузером.');
+      }
+      $('copyPreviewStatus').textContent = 'Текст скопирован. Можно вставить его в другое приложение.';
+    } catch (err) {
+      $('copyPreviewStatus').textContent = 'Не удалось скопировать автоматически. Выделите текст в поле ввода и скопируйте вручную.';
+    }
+  });
   /* ================= Импорт рукописного бланка ================= */
   var worksheetApi = null, worksheetFiles = [], worksheetPreviewUrl = null;
   var worksheetApiPromise = import('./lib/worksheet.js').then(function (api) {
