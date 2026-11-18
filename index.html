@@ -371,6 +371,15 @@
             <button type="button" class="lib-set pbtn !text-xs" data-lib-set="decor">Декор</button>
           </div>
           <div id="symbolLibraryGrid" class="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto"></div>
+          <div class="border-t border-slate-700 mt-3 pt-3">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <h4 class="text-xs font-semibold text-slate-200">♥ Моя коллекция</h4>
+              <button type="button" id="saveCurrentToCollection" class="pbtn !text-xs">＋ Сохранить текущий глиф</button>
+            </div>
+            <p class="text-[10px] text-slate-500 mb-2">Сохраняйте собственные рисунки и готовые глифы. Нажмите на карточку, чтобы вставить копию в текущую букву.</p>
+            <div id="myGlyphCollection" class="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-36 overflow-y-auto"></div>
+            <p id="collectionEmpty" class="text-[10px] text-slate-500">Коллекция пока пуста. Выберите нарисованный символ и сохраните его сюда.</p>
+          </div>
           <p class="text-[10px] text-slate-500 mt-2">После вставки можно менять узлы, кривые, размер и форму. Доступность конкретного знака зависит от выбранного системного шрифта.</p>
         </div>
 
@@ -2286,6 +2295,90 @@
     decor: Array.from('★ ☆ ✦ ✧ ✿ ❀ ♥ ♡ ◆ ◇ ● ○ ■ □ ▲ △ → ← ↑ ↓ ∞ ✓ ✕')
   };
   var activeLibrarySet = 'latin';
+  var GLYPH_COLLECTION_KEY = 'glyphstudio_glyph_collection_v1';
+  function readGlyphCollection() {
+    try {
+      var data = JSON.parse(localStorage.getItem(GLYPH_COLLECTION_KEY) || '[]');
+      return Array.isArray(data) ? data.filter(function (item) {
+        return item && typeof item.label === 'string' && Array.isArray(item.contours) &&
+          item.contours.length <= 100 && item.contours.every(function (c) {
+            return c && Array.isArray(c.nodes) && c.nodes.length >= 2 &&
+              c.nodes.every(function (n) { return Number.isFinite(n.x) && Number.isFinite(n.y); });
+          });
+      }).slice(0, 200) : [];
+    } catch (e) { return []; }
+  }
+  var glyphCollection = readGlyphCollection();
+  function persistGlyphCollection() {
+    try {
+      localStorage.setItem(GLYPH_COLLECTION_KEY, JSON.stringify(glyphCollection));
+      return true;
+    } catch (e) {
+      alert('Не удалось сохранить коллекцию. Возможно, закончилось место в хранилище браузера.');
+      return false;
+    }
+  }
+  function renderGlyphCollection() {
+    var grid = $('myGlyphCollection');
+    if (!grid) return;
+    grid.innerHTML = '';
+    $('collectionEmpty').classList.toggle('hidden', glyphCollection.length > 0);
+    glyphCollection.forEach(function (item, index) {
+      var wrap = document.createElement('div');
+      wrap.className = 'relative min-w-0';
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'w-full h-12 rounded-md border border-amber-700/60 bg-slate-950 text-amber-200 text-xl';
+      b.textContent = item.label;
+      b.title = 'Вставить «' + item.label + '» из моей коллекции';
+      b.onclick = function () {
+        pendingContours = clone(item.contours);
+        switchTab('symbol');
+        $('symChar').value = currentChar;
+        regenPreview();
+        if (pendingContours) {
+          $('importPreview').setAttribute('aria-label', 'Предпросмотр глифа из моей коллекции');
+          $('insertBtn').disabled = false;
+        }
+      };
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'absolute -top-1 -right-1 rounded-full bg-rose-700 text-white text-[10px] w-5 h-5';
+      del.textContent = '×';
+      del.title = 'Удалить из коллекции';
+      del.onclick = function () {
+        if (!confirm('Удалить «' + item.label + '» из моей коллекции?')) return;
+        glyphCollection.splice(index, 1);
+        if (persistGlyphCollection()) renderGlyphCollection();
+      };
+      wrap.appendChild(b); wrap.appendChild(del); grid.appendChild(wrap);
+    });
+  }
+  $('saveCurrentToCollection').addEventListener('click', function () {
+    var source = objs();
+    if (!source || !source.length) {
+      alert('Сначала нарисуйте или добавьте глиф в текущий символ.');
+      return;
+    }
+    var label = prompt('Название глифа для коллекции:', currentChar);
+    if (label === null) return;
+    label = label.trim().slice(0, 12);
+    if (!label) { alert('Укажите короткое название.'); return; }
+    if (glyphCollection.length >= 200) { alert('Коллекция достигла лимита в 200 глифов. Удалите ненужные карточки.'); return; }
+    var contours = [];
+    source.forEach(function (obj) {
+      if (obj && Array.isArray(obj.contours)) obj.contours.forEach(function (c) {
+        if (c && Array.isArray(c.nodes) && c.nodes.length >= 2)
+          contours.push(clone(c));
+      });
+    });
+    if (!contours.length) { alert('В текущем символе нет пригодных контуров.'); return; }
+    glyphCollection.push({ id: uid(), label: label, contours: contours, savedAt: new Date().toISOString() });
+    if (persistGlyphCollection()) {
+      renderGlyphCollection();
+      alert('Глиф «' + label + '» сохранён в вашей коллекции.');
+    }
+  });
   function renderSymbolLibrary() {
     var grid = $('symbolLibraryGrid');
     if (!grid) return;
@@ -2307,6 +2400,8 @@
       };
       grid.appendChild(b);
     });
+    });
+    renderGlyphCollection();
   }
   document.querySelectorAll('[data-lib-set]').forEach(function (b) {
     b.addEventListener('click', function () {
