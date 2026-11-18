@@ -1545,6 +1545,12 @@
     if (g && g.snap) restore(g.snap);
     brushPts = null;
     eraseChanged = false;
+    // Перо добавляет узел сразу при pointerdown. Если браузер отменил
+    // касание до pointerup, удаляем только этот незавершённый узел.
+    if (pen.dragging && pen.dragNode) {
+      var pendingIndex = pen.nodes.indexOf(pen.dragNode);
+      if (pendingIndex >= 0) pen.nodes.splice(pendingIndex, 1);
+    }
     if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
     renderCanvas();
     updateProps();
