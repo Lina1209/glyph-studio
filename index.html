@@ -42,6 +42,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"
     onerror="var s=document.createElement('script');s.src='https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js';document.head.appendChild(s);"></script>
+  <script src="./lib/clipper.js"></script>
   <style>
     html, body { height: 100%; }
     body { background: #0f172a; color: #f1f5f9; }
@@ -1344,45 +1345,86 @@
     renderCanvas();
   }
 
+  /* ================= Геометрия ластика ================= */
+  function flattenCubicForClip(p0, p1, p2, p3, tolerance, depth, out) {
+    var dx = p3.x - p0.x, dy = p3.y - p0.y, chord = Math.hypot(dx, dy);
+    var d1 = chord > 1e-9 ? Math.abs(dy*p1.x-dx*p1.y+p3.x*p0.y-p3.y*p0.x)/chord : dist(p0,p1);
+    var d2 = chord > 1e-9 ? Math.abs(dy*p2.x-dx*p2.y+p3.x*p0.y-p3.y*p0.x)/chord : dist(p0,p2);
+    if (Math.max(d1,d2)<=tolerance || depth>=12) { out.push({x:p3.x,y:p3.y}); return; }
+    var p01=mid(p0,p1), p12=mid(p1,p2), p23=mid(p2,p3);
+    var p012=mid(p01,p12), p123=mid(p12,p23), pm=mid(p012,p123);
+    flattenCubicForClip(p0,p01,p012,pm,tolerance,depth+1,out);
+    flattenCubicForClip(pm,p123,p23,p3,tolerance,depth+1,out);
+  }
+  function contourToClipperPath(contour, scale) {
+    var ns=contour.nodes, n=ns.length;
+    if (n<3) return null;
+    var pts=[{x:ns[0].x,y:ns[0].y}];
+    for (var i=0;i<n;i++) {
+      var a=ns[i], b=ns[(i+1)%n], cv=segCtrl(a,b);
+      if (cv) flattenCubicForClip({x:a.x,y:a.y},cv[0],cv[1],{x:b.x,y:b.y},.25,0,pts);
+      else if (i<n-1) pts.push({x:b.x,y:b.y});
+    }
+    if (pts.length>1 && dist(pts[0],pts[pts.length-1])<1e-8) pts.pop();
+    var path=[];
+    for (var j=0;j<pts.length;j++) {
+      var q={X:Math.round(pts[j].x*scale),Y:Math.round(pts[j].y*scale)};
+      if (!path.length || path[path.length-1].X!==q.X || path[path.length-1].Y!==q.Y) path.push(q);
+    }
+    if (path.length>2 && path[0].X===path[path.length-1].X && path[0].Y===path[path.length-1].Y) path.pop();
+    return path.length>=3 ? path : null;
+  }
+  function eraserClipPath(p, radius, scale) {
+    var path=[], steps=48;
+    for (var i=0;i<steps;i++) {
+      var a=2*Math.PI*i/steps;
+      path.push({X:Math.round((p.x+Math.cos(a)*radius)*scale),Y:Math.round((p.y+Math.sin(a)*radius)*scale)});
+    }
+    return path;
+  }
+  function clipperArea(paths) {
+    var area=0;
+    for (var i=0;i<paths.length;i++) area+=ClipperLib.Clipper.Area(paths[i]);
+    return area;
+  }
+  function clipperPathsToContours(paths, scale) {
+    var contours=[];
+    for (var i=0;i<paths.length;i++) {
+      var path=paths[i];
+      if (!path || path.length<3 || Math.abs(ClipperLib.Clipper.Area(path))<.5) continue;
+      contours.push({nodes:path.map(function(q) {
+        return {x:q.X/scale,y:q.Y/scale,smooth:false,hIn:null,hOut:null};
+      })});
+    }
+    return contours;
+  }
+
   /* ================= Ластик ================= */
   function eraseAt(p) {
-    var r2 = eraserR * eraserR, list = objs();
-    for (var oi = list.length - 1; oi >= 0; oi--) {
-      var o = list[oi], keep = [], touched = false;
-      for (var ci = 0; ci < o.contours.length; ci++) {
-        var c = o.contours[ci];
-        var pts = flattenContour(c, 2.2);
-        if (pts.length < 3) { keep.push(c); continue; }
-        var inside = pts.map(function (q) { return (q.x - p.x) * (q.x - p.x) + (q.y - p.y) * (q.y - p.y) < r2; });
-        var any = false, all = true;
-        for (var ii = 0; ii < inside.length; ii++) { if (inside[ii]) any = true; else all = false; }
-        if (!any) { keep.push(c); continue; }
-        touched = true;
-        if (all) continue;
-        var start = inside.indexOf(true);
-        var run = [];
-        for (var j = 1; j <= pts.length; j++) {
-          var idx = (start + j) % pts.length;
-          if (!inside[idx]) run.push({ x: pts[idx].x, y: pts[idx].y });
-          if (inside[idx] || j === pts.length) {
-            if (run.length >= 3) {
-              var nodes = smoothNodes(run, .5);
-              nodes[0].hIn = null; nodes[0].smooth = false;
-              nodes[nodes.length - 1].hOut = null; nodes[nodes.length - 1].smooth = false;
-              var cc = { nodes: nodes };
-              if (Math.abs(areaOf(flattenContour(cc, 4))) > 5) keep.push(cc);
-            }
-            run = [];
-          }
-        }
+    if (typeof ClipperLib==='undefined' || !ClipperLib.Clipper)
+      throw new Error('Не загрузился модуль точного стирания. Обновите страницу при подключённом интернете.');
+    var list=objs(), scale=1000, cut=eraserClipPath(p,eraserR,scale);
+    for (var oi=list.length-1;oi>=0;oi--) {
+      var o=list[oi], subject=[];
+      for (var ci=0;ci<o.contours.length;ci++) {
+        var path=contourToClipperPath(o.contours[ci],scale);
+        if (path) subject.push(path);
       }
-      if (touched) {
-        eraseChanged = true;
-        o.contours = keep;
-        if (!keep.length) {
-          list.splice(oi, 1);
-          if (sel === o.id) { sel = null; selNode = null; }
-        }
+      if (!subject.length) continue;
+      var clipper=new ClipperLib.Clipper();
+      if (!clipper.AddPaths(subject,ClipperLib.PolyType.ptSubject,true)) continue;
+      if (!clipper.AddPath(cut,ClipperLib.PolyType.ptClip,true)) continue;
+      var solution=new ClipperLib.Paths();
+      var ok=clipper.Execute(ClipperLib.ClipType.ctDifference,solution,
+        ClipperLib.PolyFillType.pftNonZero,ClipperLib.PolyFillType.pftNonZero);
+      if (!ok) continue;
+      var before=Math.abs(clipperArea(subject)), after=Math.abs(clipperArea(solution));
+      if (before-after<=.5) continue;
+      o.contours=clipperPathsToContours(solution,scale);
+      eraseChanged=true;
+      if (!o.contours.length) {
+        list.splice(oi,1);
+        if (sel===o.id) { sel=null; selNode=null; }
       }
     }
   }
