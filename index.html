@@ -1352,9 +1352,22 @@
 
   /* ================= Кисть ================= */
   function endBrush() {
-    if (brushPts && brushPts.length > 2) {
-      var out = strokeOutline(brushPts);
-      if (out.length >= 3) commit(function () {
+    if (brushPts && brushPts.length) {
+      var out;
+      if (brushPts.length > 2) {
+        out = strokeOutline(brushPts);
+      } else {
+        // Короткое касание кистью тоже должно оставлять точку, а не пропадать.
+        var p = { x: brushPts[0][0], y: brushPts[0][1] };
+        var radius = Math.max(1, Number(brushSize.value) / 2);
+        var dot = [];
+        for (var di = 0; di < 16; di++) {
+          var da = Math.PI * 2 * di / 16;
+          dot.push({ x: p.x + Math.cos(da) * radius, y: p.y + Math.sin(da) * radius });
+        }
+        out = dot;
+      }
+      if (out && out.length >= 3) commit(function () {
         var t = getObj();
         if (!t) { t = { id: uid(), contours: [] }; objs().push(t); }
         t.contours.push(outlineToContour(out));
