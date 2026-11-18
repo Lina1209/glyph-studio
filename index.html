@@ -798,6 +798,10 @@
     return null;
   }
   function hist() { return histories[currentChar] || (histories[currentChar] = { u: [], r: [] }); }
+  function pushHistory(stack, snapshot) {
+    stack.push(snapshot);
+    if (stack.length > 60) stack.splice(0, stack.length - 60);
+  }
   function snap() { return clone(glyphData[currentChar] || []); }
   function strokeOutline(pts) {
     return engineStroke(pts, Number(brushSize.value), Number(brushThinning.value));
@@ -832,8 +836,7 @@
   }
   function commitFromSnap(s) {
     var h = hist();
-    h.u.push(s);
-    if (h.u.length > 60) h.u.shift();
+    pushHistory(h.u, s);
     h.r = [];
     edited[currentChar] = true;
     afterCommit();
@@ -847,14 +850,14 @@
   function undo() {
     var h = hist();
     if (!h.u.length) return;
-    h.r.push(snap()); restore(h.u.pop());
+    pushHistory(h.r, snap()); restore(h.u.pop());
     edited[currentChar] = true;
     afterCommit();
   }
   function redo() {
     var h = hist();
     if (!h.r.length) return;
-    h.u.push(snap()); restore(h.r.pop());
+    pushHistory(h.u, snap()); restore(h.r.pop());
     edited[currentChar] = true;
     afterCommit();
   }
@@ -2938,8 +2941,7 @@
         normalizeContours(contours, 1);
         var previous = clone(glyphData[ch] || []);
         var history = histories[ch] || (histories[ch] = { u: [], r: [] });
-        history.u.push(previous);
-        if (history.u.length > 60) history.u.shift();
+        pushHistory(history.u, previous);
         history.r = [];
         glyphData[ch] = [{ id: uid(), contours: contours }];
         edited[ch] = true;
