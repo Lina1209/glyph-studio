@@ -1411,14 +1411,23 @@
         if (path) subject.push(path);
       }
       if (!subject.length) continue;
+      // Сначала нормализуем сложные/самопересекающиеся контуры по правилу
+      // non-zero — тогда площадь и последующее вычитание считаются корректно.
+      var normalizer=new ClipperLib.Clipper();
+      if (!normalizer.AddPaths(subject,ClipperLib.PolyType.ptSubject,true)) continue;
+      var normalized=new ClipperLib.Paths();
+      var normalizedOk=normalizer.Execute(ClipperLib.ClipType.ctUnion,normalized,
+        ClipperLib.PolyFillType.pftNonZero,ClipperLib.PolyFillType.pftNonZero);
+      if (!normalizedOk || !normalized.length) continue;
+      var before=Math.abs(clipperArea(normalized));
       var clipper=new ClipperLib.Clipper();
-      if (!clipper.AddPaths(subject,ClipperLib.PolyType.ptSubject,true)) continue;
+      if (!clipper.AddPaths(normalized,ClipperLib.PolyType.ptSubject,true)) continue;
       if (!clipper.AddPath(cut,ClipperLib.PolyType.ptClip,true)) continue;
       var solution=new ClipperLib.Paths();
       var ok=clipper.Execute(ClipperLib.ClipType.ctDifference,solution,
         ClipperLib.PolyFillType.pftNonZero,ClipperLib.PolyFillType.pftNonZero);
       if (!ok) continue;
-      var before=Math.abs(clipperArea(subject)), after=Math.abs(clipperArea(solution));
+      var after=Math.abs(clipperArea(solution));
       if (before-after<=.5) continue;
       o.contours=clipperPathsToContours(solution,scale);
       eraseChanged=true;
