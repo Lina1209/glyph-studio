@@ -2206,6 +2206,12 @@
       updateLiveFont();
       if (imported.length) {
         currentChar = imported[0];
+        visibleChars = SETS.all;
+        document.querySelectorAll('.set-btn').forEach(function (btn) {
+          btn.className = btn.dataset.set === 'all'
+            ? 'set-btn text-xs px-2 py-1 rounded bg-indigo-600'
+            : 'set-btn text-xs px-2 py-1 rounded bg-slate-700';
+        });
         sel = null; selNode = null; pen.nodes = [];
         $('currentCharLabel').textContent = currentChar;
         renderCanvas(); updateProps(); renderGrid();
