@@ -2296,16 +2296,40 @@
   };
   var activeLibrarySet = 'latin';
   var GLYPH_COLLECTION_KEY = 'glyphstudio_glyph_collection_v1';
+  function validateGlyphCollection(data) {
+    if (!Array.isArray(data) || data.length > 200) {
+      throw new Error('Коллекция должна содержать не более 200 глифов.');
+    }
+    var totalNodes = 0;
+    data.forEach(function (item) {
+      if (!item || typeof item !== 'object' || typeof item.label !== 'string' ||
+          !item.label.trim() || item.label.length > 12 || !Array.isArray(item.contours) ||
+          item.contours.length > 100) {
+        throw new Error('В коллекции найден некорректный глиф.');
+      }
+      item.contours.forEach(function (contour) {
+        if (!contour || typeof contour !== 'object' || !Array.isArray(contour.nodes) ||
+            contour.nodes.length < 2 || contour.nodes.length > 20000) {
+          throw new Error('В коллекции найден повреждённый контур.');
+        }
+        totalNodes += contour.nodes.length;
+        if (totalNodes > 250000) throw new Error('Коллекция слишком велика для безопасного восстановления.');
+        contour.nodes.forEach(function (node) {
+          if (!validBackupPoint(node) ||
+              (node.hIn != null && !validBackupPoint(node.hIn)) ||
+              (node.hOut != null && !validBackupPoint(node.hOut))) {
+            throw new Error('В коллекции обнаружены некорректные координаты.');
+          }
+        });
+      });
+    });
+    return true;
+  }
   function readGlyphCollection() {
     try {
       var data = JSON.parse(localStorage.getItem(GLYPH_COLLECTION_KEY) || '[]');
-      return Array.isArray(data) ? data.filter(function (item) {
-        return item && typeof item.label === 'string' && Array.isArray(item.contours) &&
-          item.contours.length <= 100 && item.contours.every(function (c) {
-            return c && Array.isArray(c.nodes) && c.nodes.length >= 2 &&
-              c.nodes.every(function (n) { return Number.isFinite(n.x) && Number.isFinite(n.y); });
-          });
-      }).slice(0, 200) : [];
+      validateGlyphCollection(data);
+      return data;
     } catch (e) { return []; }
   }
   var glyphCollection = readGlyphCollection();
@@ -2967,7 +2991,8 @@
       version: 1,
       exportedAt: new Date().toISOString(),
       fontName: $('fontName').value || 'MyHandwriting',
-      glyphs: glyphData
+      glyphs: glyphData,
+      glyphCollection: glyphCollection
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     var url = URL.createObjectURL(blob);
@@ -3030,6 +3055,10 @@
     if (data.fontName != null && typeof data.fontName !== 'string') {
       throw new Error('Некорректное название шрифта в резервной копии.');
     }
+    // Backups created before collection support remain fully compatible.
+    if (Object.prototype.hasOwnProperty.call(data, 'glyphCollection')) {
+      validateGlyphCollection(data.glyphCollection);
+    }
     return true;
   }
   $('exportProjectBtn').onclick = function () {
@@ -3054,6 +3083,7 @@
         var count = Object.keys(data.glyphs).length;
         if (!confirm('Восстановить резервную копию? Текущий проект будет заменён. Символов в файле: ' + count + '. Перед продолжением рекомендуется скачать текущую копию кнопкой «⬇️ JSON».')) return;
         var previousGlyphs = glyphData, previousName = $('fontName').value;
+        var previousCollection = glyphCollection;
         glyphData = clone(data.glyphs);
         $('fontName').value = data.fontName || 'MyHandwriting';
         var localSaved = saveProject();
@@ -3064,6 +3094,13 @@
           alert('Не удалось сохранить восстановленный проект ни в основной, ни в дополнительной копии. Текущая работа оставлена без изменений.');
           return;
         }
+        if (Object.prototype.hasOwnProperty.call(data, 'glyphCollection')) {
+          glyphCollection = clone(data.glyphCollection);
+          if (!persistGlyphCollection()) {
+            glyphCollection = previousCollection;
+            alert('Основной проект восстановлен, но личная коллекция не записалась в хранилище браузера. Сохраните JSON-копию и проверьте свободное место.');
+          }
+        }
         Object.keys(histories).forEach(function (k) { delete histories[k]; });
         legacy = null; edited = {};
         sel = null; selNode = null; gesture = null; brushPts = null;
@@ -3071,7 +3108,11 @@
         pen.nodes = []; pen.dragging = false; pen.dragNode = -1;
         currentChar = Object.keys(glyphData).find(function (ch) { return glyphData[ch] && glyphData[ch].length; }) || 'А';
         renderGrid(); renderCanvas(); updateLiveFont(); updateProps();
-        alert('Резервная копия восстановлена. Символов: ' + count + '.');
+        renderGlyphCollection();
+        alert('Резервная копия восстановлена. Символов: ' + count +
+          (Object.prototype.hasOwnProperty.call(data, 'glyphCollection')
+            ? ', глифов в личной коллекции: ' + glyphCollection.length + '.'
+            : '. Личная коллекция оставлена без изменений (старый формат копии).'));
       } catch (err) {
         alert('Не удалось восстановить проект: ' + (err.message || err));
       }
