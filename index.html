@@ -1219,10 +1219,15 @@
     return [['nw', bb.x, bb.y], ['n', bb.cx, bb.y], ['ne', bb.x2, bb.y], ['e', bb.x2, bb.cy],
             ['se', bb.x2, bb.y2], ['s', bb.cx, bb.y2], ['sw', bb.x, bb.y2], ['w', bb.x, bb.cy]];
   }
+  // Keep small vector handles usable with a fingertip on narrow phone screens.
+  function touchHitRadius(baseUnits) {
+    var rect = drawSvg.getBoundingClientRect();
+    return Math.max(baseUnits * view.w / 360, 16 * view.w / Math.max(1, rect.width));
+  }
   function hitHandle(p, bb, k) {
-    var hs = handlePts(bb);
+    var hs = handlePts(bb), radius = touchHitRadius(8);
     for (var i = 0; i < hs.length; i++)
-      if (Math.abs(p.x - hs[i][1]) < 8 * k && Math.abs(p.y - hs[i][2]) < 8 * k) return hs[i][0];
+      if (Math.abs(p.x - hs[i][1]) < radius && Math.abs(p.y - hs[i][2]) < radius) return hs[i][0];
     return null;
   }
   function hitObject(p, k) {
@@ -1435,7 +1440,7 @@
         var sn = so.contours[selNode.ci].nodes[selNode.ni];
         var handleHit = null;
         ['hIn', 'hOut'].forEach(function (w) {
-          if (!handleHit && sn[w] && dist(p, sn[w]) < 8 * k) handleHit = w;
+          if (!handleHit && sn[w] && dist(p, sn[w]) < touchHitRadius(8)) handleHit = w;
         });
         if (handleHit) {
           gesture = { type: 'handle', snap: snap(), objId: so.id, ci: selNode.ci, ni: selNode.ni, which: handleHit,
@@ -1460,7 +1465,7 @@
           return;
         }
       }
-      var nh = hitNode(so, p, 8 * k);
+      var nh = hitNode(so, p, touchHitRadius(8));
       if (nh) {
         if (dbl && selNode && selNode.ci === nh.ci && selNode.ni === nh.ni) { toggleSmooth(so, nh); return; }
         selNode = nh;
@@ -1468,7 +1473,7 @@
         updateProps(); renderCanvas();
         return;
       }
-      var sh = hitSegment(so, p, 6 * k);
+      var sh = hitSegment(so, p, touchHitRadius(6));
       if (sh) {
         if (sh.t < .1 || sh.t > .9) {
           var len2 = so.contours[sh.ci].nodes.length;
@@ -1517,7 +1522,7 @@
   function penDown(p, dbl) {
     var k = view.w / 360;
     if (dbl) { finishPen(); return; }
-    if (pen.nodes.length >= 3 && dist(p, pen.nodes[0]) < 10 * k) { finishPen(); return; }
+    if (pen.nodes.length >= 3 && dist(p, pen.nodes[0]) < touchHitRadius(10)) { finishPen(); return; }
     var n = { x: F(p.x), y: F(p.y), hIn: null, hOut: null, smooth: false };
     pen.nodes.push(n); pen.dragging = true; pen.dragNode = n;
     renderCanvas();
