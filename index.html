@@ -361,7 +361,8 @@
         </div>
 
         <div id="tabLibrary" class="hidden">
-          <p class="text-xs text-slate-400 mb-2">Выберите заготовку. Она будет построена из выбранного выше шрифта и превращена в редактируемые векторные контуры.</p>
+          <p class="text-xs text-slate-400 mb-2">Выберите заготовку. Она будет построена из выбранного шрифта и превращена в редактируемые векторные контуры.</p>
+          <button type="button" id="libraryFontSettings" class="pbtn !text-xs mb-3">⚙ Выбрать шрифт и начертание</button>
           <div class="flex flex-wrap gap-1.5 mb-3">
             <button type="button" class="lib-set pbtn !text-xs" data-lib-set="latin">Латиница</button>
             <button type="button" class="lib-set pbtn !text-xs" data-lib-set="cyrillic">Кириллица</button>
@@ -2312,6 +2313,10 @@
       activeLibrarySet = b.dataset.libSet;
       renderSymbolLibrary();
     });
+  });
+  $('libraryFontSettings').addEventListener('click', function () {
+    switchTab('symbol');
+    $('symFamily').focus();
   });
   $('symFamily').addEventListener('change', function () {
     if (importTab === 'library') renderSymbolLibrary();
