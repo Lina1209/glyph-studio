@@ -822,6 +822,103 @@
     if (sel && !getObj()) { sel = null; selNode = null; }
     saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
   }
+  // IndexedDB keeps a second, larger-capacity copy of the project.
+  var projectDbPromise = null;
+  var projectDbWriteChain = Promise.resolve();
+  function openProjectDB() {
+    if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB недоступна'));
+    if (projectDbPromise) return projectDbPromise;
+    projectDbPromise = new Promise(function (resolve, reject) {
+      var request = indexedDB.open('GlyphStudioDB', 1);
+      request.onupgradeneeded = function () {
+        var db = request.result;
+        if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
+      };
+      request.onsuccess = function () {
+        var db = request.result;
+        db.onversionchange = function () { db.close(); projectDbPromise = null; };
+        resolve(db);
+      };
+      request.onerror = function () { projectDbPromise = null; reject(request.error || new Error('Не удалось открыть IndexedDB')); };
+      request.onblocked = function () { console.warn('GlyphStudio IndexedDB upgrade is blocked'); };
+    });
+    return projectDbPromise;
+  }
+  function readProjectFromDB() {
+    return openProjectDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('projects', 'readonly');
+        var request = tx.objectStore('projects').get('current');
+        request.onsuccess = function () { resolve(request.result || null); };
+        request.onerror = function () { reject(request.error || new Error('Не удалось прочитать IndexedDB')); };
+      });
+    });
+  }
+  function writeProjectToDB(payload) {
+    return openProjectDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put({
+          id: 'current',
+          fontName: payload.fontName,
+          glyphs: payload.glyphs,
+          savedAt: payload.savedAt
+        });
+        tx.oncomplete = resolve;
+        tx.onerror = function () { reject(tx.error || new Error('Не удалось записать IndexedDB')); };
+        tx.onabort = function () { reject(tx.error || new Error('Запись IndexedDB отменена')); };
+      });
+    });
+  }
+  function queueProjectDBSave(payload) {
+    // Keep writes ordered so an older asynchronous write cannot overwrite a newer edit.
+    projectDbWriteChain = projectDbWriteChain.then(function () {
+      return writeProjectToDB(payload);
+    }).catch(function (err) {
+      console.warn('GlyphStudio IndexedDB save', err);
+      var status = $('appStatus');
+      if (status) {
+        status.textContent = '!';
+        status.title = 'Дополнительная копия IndexedDB не обновилась. Скачайте JSON.';
+      }
+    });
+    return projectDbWriteChain;
+  }
+  function applyStoredProject(record) {
+    if (!record || !record.glyphs || typeof record.glyphs !== 'object' || Array.isArray(record.glyphs)) return false;
+    try {
+      validateProjectBackup({
+        format: 'GlyphStudioProject', version: 1,
+        fontName: record.fontName || 'MyHandwriting',
+        glyphs: record.glyphs
+      });
+      glyphData = clone(record.glyphs);
+      $('fontName').value = record.fontName || 'MyHandwriting';
+      return true;
+    } catch (err) {
+      console.warn('Ignoring invalid IndexedDB project copy', err);
+      return false;
+    }
+  }
+  function restoreNewerIndexedDBCopy() {
+    return readProjectFromDB().then(function (record) {
+      if (!record) return false;
+      var localSavedAt = '';
+      try {
+        var local = JSON.parse(localStorage.getItem(KEY2) || 'null');
+        localSavedAt = local && local.savedAt || '';
+      } catch (e) {}
+      var dbSavedAt = record.savedAt || '';
+      if (dbSavedAt && (!localSavedAt || dbSavedAt > localSavedAt)) {
+        return applyStoredProject(record);
+      }
+      return false;
+    }).catch(function (err) {
+      console.warn('GlyphStudio IndexedDB restore', err);
+      return false;
+    });
+  }
+
   function loadProject() {
     try {
       var raw2 = localStorage.getItem(KEY2);
@@ -850,17 +947,23 @@
   }
   var quotaWarned = false;
   function saveProject() {
+    var payload = {
+      fontName: $('fontName').value,
+      glyphs: clone(glyphData),
+      savedAt: new Date().toISOString()
+    };
+    // IndexedDB is maintained as a second copy; localStorage remains the
+    // synchronous compatibility/migration layer for older app versions.
+    queueProjectDBSave(payload);
     try {
-      localStorage.setItem(KEY2, JSON.stringify({
-        fontName: $('fontName').value, glyphs: glyphData, savedAt: new Date().toISOString()
-      }));
+      localStorage.setItem(KEY2, JSON.stringify(payload));
       return true;
     } catch (e) {
       if (!quotaWarned) {
         quotaWarned = true;
-        alert('Не удалось сохранить проект в браузере (возможно, закончилось место). Скачайте резервную копию проекта кнопкой «⬇️ JSON» и освободите место в хранилище.');
+        alert('Не удалось сохранить основную копию в браузере (возможно, закончилось место). Дополнительное сохранение в IndexedDB выполняется. На всякий случай скачайте резервную копию кнопкой «⬇️ JSON».');
       }
-      console.warn('saveProject', e);
+      console.warn('saveProject localStorage', e);
       return false;
     }
   }
@@ -2580,8 +2683,7 @@
   });
 
   /* ================= Старт ================= */
-  try {
-    loadProject();
+  function startEditor() {
     setViewBox();
     setTool('brush');
     renderGrid();
@@ -2589,8 +2691,20 @@
     updateLiveFont();
     saveProject();
     $('appStatus').textContent = '✔';
-    $('appStatus').title = 'Редактор запущен';
+    $('appStatus').title = 'Редактор запущен; резервная копия IndexedDB обновляется автоматически';
     loadEngine(0);
+  }
+  try {
+    loadProject();
+    restoreNewerIndexedDBCopy().then(function (restored) {
+      if (restored) {
+        renderGrid(); renderCanvas(); updateLiveFont(); updateProps();
+      }
+      startEditor();
+    }).catch(function (err) {
+      console.warn('IndexedDB startup restore', err);
+      startEditor();
+    });
   } catch (err) {
     $('appStatus').textContent = '✖';
     var b = document.createElement('div');
