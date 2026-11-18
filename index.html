@@ -1074,9 +1074,19 @@
         var x = a.x + u * dx, y = a.y + u * dy;
         var ex = p.x - x, ey = p.y - y, d = ex * ex + ey * ey;
         if (d < bd) {
-          var t1 = a.t, t2 = (b.seg === a.seg) ? b.t : 1;
+          var seg, t1, t2;
+          if (b.seg === a.seg) {
+            seg = a.seg; t1 = a.t; t2 = b.t;
+          } else if (j === f.length - 1) {
+            // Замыкающий отрезок последнего сегмента к первой точке контура.
+            seg = a.seg; t1 = a.t; t2 = 1;
+          } else {
+            // Точка a — общий узел двух сегментов; отрезок после неё
+            // уже относится к следующему сегменту.
+            seg = b.seg; t1 = 0; t2 = b.t;
+          }
           bd = d;
-          best = { ci: ci, seg: a.seg, t: t1 + (t2 - t1) * u };
+          best = { ci: ci, seg: seg, t: t1 + (t2 - t1) * u };
         }
       }
     });
