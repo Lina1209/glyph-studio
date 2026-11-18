@@ -2692,10 +2692,11 @@
         }
       }
       if (!has || !mapped.length) continue;
-      var shiftX=(isFinite(minX)?minX:0)-8*scale;
+      var sideBearing=16*scale;
+      var shiftX=(isFinite(minX)?minX:0)-sideBearing;
       for (var mi=0;mi<mapped.length;mi++)
         appendTrueTypeContour(fontPath,mapped[mi],scale,baselineY,shiftX);
-      var width=Math.max(120,Math.round(maxX-shiftX+24*scale));
+      var width=Math.max(120,Math.round(maxX-shiftX+sideBearing));
       glyphs.push(new opentype.Glyph({
         name:'uni'+char.charCodeAt(0).toString(16).toUpperCase(),
         unicode:char.charCodeAt(0),advanceWidth:width,path:fontPath
