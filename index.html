@@ -2779,9 +2779,16 @@
   };
 
   /* ================= Прочее ================= */
-  $('saveProjectBtn').onclick = function () {
-    if (saveProject()) alert('Проект сохранён в браузере.');
-    else alert('Не удалось сохранить проект. Скачайте резервную копию кнопкой «⬇️ JSON» и освободите место в хранилище браузера.');
+  $('saveProjectBtn').onclick = async function () {
+    var localSaved = saveProject();
+    var indexedDbSaved = await lastProjectSavePromise;
+    if (localSaved && indexedDbSaved) {
+      alert('Проект и все объекты глифов сохранены в браузере: основная копия и резервная копия IndexedDB.');
+    } else if (localSaved || indexedDbSaved) {
+      alert('Проект сохранён только в одной копии браузера. Для надёжности скачайте резервную копию кнопкой «⬇️ JSON».');
+    } else {
+      alert('Не удалось сохранить проект ни в одной копии браузера. Скачайте JSON-файл резервной копии и проверьте свободное место.');
+    }
   };
   $('fontName').addEventListener('change', saveProject);
 
