@@ -2040,6 +2040,61 @@
   });
 
   /* ================= Сборка шрифта ================= */
+  // Приближает кубическую кривую квадратичными сегментами TrueType.
+  // Деление пополам продолжается, пока ошибка в контрольных точках не станет малой.
+  function cubicToQuadratics(p0, p1, p2, p3, tolerance, depth, out) {
+    var q = {
+      x: (3 * p1.x + 3 * p2.x - p0.x - p3.x) / 4,
+      y: (3 * p1.y + 3 * p2.y - p0.y - p3.y) / 4
+    };
+    function cubic(t) {
+      var mt = 1 - t, a = mt * mt * mt, b = 3 * mt * mt * t;
+      var c = 3 * mt * t * t, d = t * t * t;
+      return { x: a*p0.x+b*p1.x+c*p2.x+d*p3.x, y: a*p0.y+b*p1.y+c*p2.y+d*p3.y };
+    }
+    function quad(t) {
+      var mt = 1 - t;
+      return { x: mt*mt*p0.x+2*mt*t*q.x+t*t*p3.x, y: mt*mt*p0.y+2*mt*t*q.y+t*t*p3.y };
+    }
+    var err = 0;
+    [0.25, 0.5, 0.75].forEach(function (t) {
+      var a = cubic(t), b = quad(t);
+      err = Math.max(err, Math.hypot(a.x-b.x, a.y-b.y));
+    });
+    if (err <= tolerance || depth >= 10) {
+      out.push({ control: q, end: p3 });
+      return;
+    }
+    // De Casteljau: точное деление исходной кубической кривой пополам.
+    var p01 = mid(p0,p1), p12 = mid(p1,p2), p23 = mid(p2,p3);
+    var p012 = mid(p01,p12), p123 = mid(p12,p23), pm = mid(p012,p123);
+    cubicToQuadratics(p0,p01,p012,pm,tolerance,depth+1,out);
+    cubicToQuadratics(pm,p123,p23,p3,tolerance,depth+1,out);
+  }
+  function mid(a,b) { return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+  function appendTrueTypeContour(path, contour, scale, baselineY, shiftX) {
+    var ns = contour.nodes, n = ns.length;
+    if (n < 2) return;
+    function map(p) {
+      return { x:p.x*scale-shiftX, y:(baselineY-p.y)*scale };
+    }
+    var first = map(ns[0]);
+    path.moveTo(Math.round(first.x), Math.round(first.y));
+    for (var i=0;i<n;i++) {
+      var a=ns[i], b=ns[(i+1)%n], end=map(b), cv=segCtrl(a,b);
+      if (!cv) {
+        path.lineTo(Math.round(end.x),Math.round(end.y));
+        continue;
+      }
+      var start=map(a), c1=map(cv[0]), c2=map(cv[1]), pieces=[];
+      cubicToQuadratics(start,c1,c2,end,0.35,0,pieces);
+      pieces.forEach(function (piece) {
+        path.quadraticCurveTo(Math.round(piece.control.x),Math.round(piece.control.y),
+          Math.round(piece.end.x),Math.round(piece.end.y));
+      });
+    }
+    path.close();
+  }
   function buildOpenTypeFont() {
     if (typeof opentype === 'undefined') throw new Error('Библиотека opentype.js не загрузилась. Проверь интернет и обнови страницу.');
     var unitsPerEm = 1000, ascender = 800, descender = -200, baselineY = 270, scale = 1000 / 360;
@@ -2054,46 +2109,42 @@
       var minX = Infinity, maxX = -Infinity, has = false;
       var mapped = [];
       for (var oi = 0; oi < objects.length; oi++) {
-        var flats = [];
-        for (var ci = 0; ci < objects[oi].contours.length; ci++) {
-          var flat = flattenContour(objects[oi].contours[ci], 2.2).map(function (p) {
-            return { x: p.x * scale, y: (baselineY - p.y) * scale };
+        var contours = objects[oi].contours || [], flats = [];
+        for (var ci = 0; ci < contours.length; ci++) {
+          var flat = flattenContour(contours[ci], 1.5).map(function (p) {
+            return { x:p.x*scale, y:(baselineY-p.y)*scale };
           });
-          if (flat.length >= 3) { flats.push(flat); has = true; }
+          if (flat.length >= 3) { flats.push({ contour:clone(contours[ci]), points:flat }); has = true; }
         }
-        if (!flats.length) continue;
         for (var fi = 0; fi < flats.length; fi++) {
           var depth = 0;
           for (var fj = 0; fj < flats.length; fj++)
-            if (fj !== fi && pointInPoly(flats[fi][0], flats[fj])) depth++;
-          var pts = flats[fi];
-          var want = (depth % 2 === 0) ? -1 : 1;
-          var ar = areaOf(pts);
-          if ((ar > 0 ? 1 : -1) !== want) pts = pts.slice().reverse();
-          for (var pi = 0; pi < pts.length; pi++) {
-            if (pts[pi].x < minX) minX = pts[pi].x;
-            if (pts[pi].x > maxX) maxX = pts[pi].x;
+            if (fj !== fi && pointInPoly(flats[fi].points[0],flats[fj].points)) depth++;
+          var pts=flats[fi].points, want=(depth%2===0)?-1:1, ar=areaOf(pts);
+          if (ar !== 0 && (ar>0?1:-1)!==want) {
+            pts=pts.slice().reverse();
+            reverseContour(flats[fi].contour);
           }
-          mapped.push(pts);
+          for (var pi=0;pi<pts.length;pi++) {
+            if (pts[pi].x<minX) minX=pts[pi].x;
+            if (pts[pi].x>maxX) maxX=pts[pi].x;
+          }
+          mapped.push(flats[fi].contour);
         }
       }
       if (!has || !mapped.length) continue;
-      var shiftX = (isFinite(minX) ? minX : 0) - 8 * scale;
-      for (var mi = 0; mi < mapped.length; mi++) {
-        var mp = mapped[mi];
-        fontPath.moveTo(Math.round(mp[0].x - shiftX), Math.round(mp[0].y));
-        for (var mj = 1; mj < mp.length; mj++) fontPath.lineTo(Math.round(mp[mj].x - shiftX), Math.round(mp[mj].y));
-        fontPath.close();
-      }
-      var width = Math.max(120, Math.round(maxX - shiftX + 24 * scale));
+      var shiftX=(isFinite(minX)?minX:0)-8*scale;
+      for (var mi=0;mi<mapped.length;mi++)
+        appendTrueTypeContour(fontPath,mapped[mi],scale,baselineY,shiftX);
+      var width=Math.max(120,Math.round(maxX-shiftX+24*scale));
       glyphs.push(new opentype.Glyph({
-        name: 'uni' + char.charCodeAt(0).toString(16).toUpperCase(),
-        unicode: char.charCodeAt(0), advanceWidth: width, path: fontPath
+        name:'uni'+char.charCodeAt(0).toString(16).toUpperCase(),
+        unicode:char.charCodeAt(0),advanceWidth:width,path:fontPath
       }));
     }
-    var familyName = $('fontName').value.trim() || 'MyHandwriting';
-    return new opentype.Font({ familyName: familyName, styleName: 'Regular',
-      unitsPerEm: unitsPerEm, ascender: ascender, descender: descender, glyphs: glyphs });
+    var familyName=$('fontName').value.trim()||'MyHandwriting';
+    return new opentype.Font({familyName:familyName,styleName:'Regular',
+      unitsPerEm:unitsPerEm,ascender:ascender,descender:descender,glyphs:glyphs});
   }
   function updateLiveFont() {
     try {
