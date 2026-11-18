@@ -284,6 +284,20 @@
   </main>
 
 
+  <section id="fontPassport" class="max-w-7xl w-full mx-auto px-4 sm:px-6 pb-6"><div class="bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-3"><div><h2 class="font-semibold text-slate-100">📖 Паспорт шрифта</h2><p class="text-xs text-slate-400 mt-1">Автор, история и каталог отдельных знаков.</p></div><button id="passportPrintBtn" type="button" class="pbtn !bg-indigo-600 !border-indigo-500">Скачать паспорт PDF / Печать</button></div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+<label class="text-xs text-slate-300">Автор / создатель<input id="passportAuthor" maxlength="120" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="Имя автора"></label>
+<label class="text-xs text-slate-300">Год создания<input id="passportYear" maxlength="4" inputmode="numeric" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="2026"></label>
+<label class="text-xs text-slate-300 sm:col-span-2">Описание и история шрифта<textarea id="passportDescription" rows="3" maxlength="3000" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="Идея, история и особенности…"></textarea></label>
+<label class="text-xs text-slate-300 sm:col-span-2">Лицензия / условия использования<input id="passportLicense" maxlength="500" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="Условия использования"></label></div>
+<div class="mt-5 border-t border-slate-700 pt-4"><h3 class="font-semibold text-sm mb-2">Каталог знаков</h3><p class="text-xs text-slate-400 mb-3">Выберите символ в редакторе — поля ниже относятся к нему.</p>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<label class="text-xs text-slate-300">Текущий знак<input id="passportGlyphChar" readonly class="mt-1 w-full rounded-md bg-slate-950 border border-slate-700 p-2 text-xl text-amber-200"></label>
+<label class="text-xs text-slate-300">Название знака<input id="passportGlyphName" maxlength="120" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="Например: Ансуз"></label>
+<label class="text-xs text-slate-300">Соответствие букве / коду<input id="passportGlyphMapping" maxlength="80" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="Например: А"></label>
+<label class="text-xs text-slate-300 sm:col-span-3">Описание и значение знака<textarea id="passportGlyphDescription" rows="2" maxlength="1500" class="mt-1 w-full rounded-md bg-slate-900 border border-slate-600 p-2 text-sm" placeholder="История, значение, особенности начертания…"></textarea></label></div><p id="passportStatus" class="text-xs text-emerald-300 mt-2" role="status">Изменения сохраняются вместе с проектом.</p></div></div></section>
+
   <section class="max-w-7xl w-full mx-auto px-4 sm:px-6 pb-6">
     <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -820,6 +834,10 @@
   SETS.all = SETS.cyr.concat(SETS.lat, SETS.num);
   var visibleChars = SETS.cyr;
   var glyphData = {};
+  var fontPassport = {author:'',year:'',description:'',license:''};
+  var glyphDescriptions = {};
+  function normalizePassport(v) { v=v&&typeof v==='object'?v:{}; return {author:typeof v.author==='string'?v.author.slice(0,120):'',year:typeof v.year==='string'?v.year.slice(0,4):'',description:typeof v.description==='string'?v.description.slice(0,3000):'',license:typeof v.license==='string'?v.license.slice(0,500):''}; }
+  function normalizeGlyphDescriptions(v) { var out={}; if(!v||typeof v!=='object'||Array.isArray(v))return out; Object.keys(v).slice(0,1000).forEach(function(ch){var d=v[ch];if(d&&typeof d==='object')out[ch]={name:typeof d.name==='string'?d.name.slice(0,120):'',mapping:typeof d.mapping==='string'?d.mapping.slice(0,80):'',description:typeof d.description==='string'?d.description.slice(0,1500):''};});return out; }
   var currentChar = 'А';
   var tool = 'brush';
   var view = { x: 0, y: 0, w: 360 };
@@ -1003,6 +1021,7 @@
       });
       glyphData = clone(record.glyphs);
       $('fontName').value = record.fontName || 'MyHandwriting';
+      fontPassport = normalizePassport(record.passport); glyphDescriptions = normalizeGlyphDescriptions(record.glyphDescriptions);
       return true;
     } catch (err) {
       console.warn('Ignoring invalid IndexedDB project copy', err);
@@ -1055,6 +1074,7 @@
           });
           glyphData = clone(d2.glyphs);
           if (d2.fontName) $('fontName').value = d2.fontName;
+          fontPassport = normalizePassport(d2.passport); glyphDescriptions = normalizeGlyphDescriptions(d2.glyphDescriptions);
           return;
         } catch (v2Error) {
           console.warn('Ignoring invalid local GlyphStudio v2 copy; trying recovery sources.', v2Error);
@@ -1103,6 +1123,8 @@
     var payload = {
       fontName: $('fontName').value,
       glyphs: clone(glyphData),
+      passport: clone(fontPassport),
+      glyphDescriptions: clone(glyphDescriptions),
       savedAt: new Date().toISOString()
     };
     var localSaved = false;
@@ -2994,7 +3016,27 @@
     }
   };
   $('fontName').addEventListener('change', saveProject);
-
+  function syncPassportForm() {
+    $('passportAuthor').value=fontPassport.author; $('passportYear').value=fontPassport.year;
+    $('passportDescription').value=fontPassport.description; $('passportLicense').value=fontPassport.license;
+    $('passportGlyphChar').value=currentChar; var d=glyphDescriptions[currentChar]||{};
+    $('passportGlyphName').value=d.name||''; $('passportGlyphMapping').value=d.mapping||'';
+    $('passportGlyphDescription').value=d.description||'';
+  }
+  function escapePassportHtml(v){return String(v||'').replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+  ['passportAuthor','passportYear','passportDescription','passportLicense'].forEach(function(id){
+    $(id).addEventListener('input',function(){var k={passportAuthor:'author',passportYear:'year',passportDescription:'description',passportLicense:'license'}[id];fontPassport[k]=$(id).value;saveProject({silent:true});});
+  });
+  ['passportGlyphName','passportGlyphMapping','passportGlyphDescription'].forEach(function(id){
+    $(id).addEventListener('input',function(){var d=glyphDescriptions[currentChar]||(glyphDescriptions[currentChar]={name:'',mapping:'',description:''});var k={passportGlyphName:'name',passportGlyphMapping:'mapping',passportGlyphDescription:'description'}[id];d[k]=$(id).value;saveProject({silent:true});});
+  });
+  function printFontPassport(){
+    var w=window.open('','_blank');if(!w){$('passportStatus').textContent='Разрешите всплывающие окна для PDF.';return;}
+    var rows=Object.keys(glyphData).filter(function(ch){return glyphData[ch]&&glyphData[ch].length;}).sort(function(a,b){return a.localeCompare(b,'ru');}).map(function(ch){var d=glyphDescriptions[ch]||{};return '<tr><td class="sign">'+escapePassportHtml(ch)+'</td><td>'+escapePassportHtml(d.name)+'</td><td>'+escapePassportHtml(d.mapping||ch)+'</td><td>'+escapePassportHtml(d.description)+'</td></tr>';}).join('');
+    var doc='<!doctype html><html lang="ru"><meta charset="utf-8"><title>Паспорт шрифта</title><style>body{font:14px/1.5 Arial,sans-serif;color:#172033;margin:28px}h1{margin-bottom:4px}.muted{color:#64748b}p{white-space:pre-wrap}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left;vertical-align:top}th{background:#eef2ff}.sign{font-size:24px;text-align:center}@media print{body{margin:14mm}tr{break-inside:avoid}}</style><h1>'+escapePassportHtml($('fontName').value||'Без названия')+'</h1><div class="muted">Паспорт авторского шрифта · GlyphStudio</div><p><b>Автор:</b> '+escapePassportHtml(fontPassport.author||'Не указан')+'　 <b>Год:</b> '+escapePassportHtml(fontPassport.year||'Не указан')+'</p><h2>О шрифте</h2><p>'+escapePassportHtml(fontPassport.description||'Описание не добавлено.')+'</p><p><b>Лицензия / условия:</b> '+escapePassportHtml(fontPassport.license||'Не указаны')+'</p><h2>Каталог знаков</h2><table><thead><tr><th>Знак</th><th>Название</th><th>Соответствие</th><th>Описание</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4">Нарисованных знаков пока нет.</td></tr>')+'</tbody></table><script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script></html>';
+    w.document.open();w.document.write(doc);w.document.close();
+  }
+  $('passportPrintBtn').addEventListener('click',printFontPassport);
   function exportProjectBackup() {
     var payload = {
       format: 'GlyphStudioProject',
@@ -3002,7 +3044,9 @@
       exportedAt: new Date().toISOString(),
       fontName: $('fontName').value || 'MyHandwriting',
       glyphs: glyphData,
-      glyphCollection: glyphCollection
+      glyphCollection: glyphCollection,
+      passport: fontPassport,
+      glyphDescriptions: glyphDescriptions
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     var url = URL.createObjectURL(blob);
@@ -3096,11 +3140,14 @@
         var previousCollection = glyphCollection;
         glyphData = clone(data.glyphs);
         $('fontName').value = data.fontName || 'MyHandwriting';
+        var previousPassport=fontPassport, previousDescriptions=glyphDescriptions;
+        fontPassport=normalizePassport(data.passport); glyphDescriptions=normalizeGlyphDescriptions(data.glyphDescriptions);
         var localSaved = saveProject();
         var indexedDbSaved = await lastProjectSavePromise;
         if (!localSaved && !indexedDbSaved) {
           glyphData = previousGlyphs;
           $('fontName').value = previousName;
+          fontPassport=previousPassport; glyphDescriptions=previousDescriptions;
           alert('Не удалось сохранить восстановленный проект ни в основной, ни в дополнительной копии. Текущая работа оставлена без изменений.');
           return;
         }
@@ -3329,6 +3376,7 @@
     renderGrid();
     renderCanvas();
     updateLiveFont();
+    syncPassportForm();
     saveProject();
     loadEngine(0);
   }
