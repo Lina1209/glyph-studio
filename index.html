@@ -1135,12 +1135,15 @@
       if (bb) {
         ov.appendChild(el('rect', { x: bb.x, y: bb.y, width: bb.w, height: bb.h, fill: 'none',
           stroke: '#6366f1', 'stroke-width': 1.1 * k, 'stroke-dasharray': (5 * k) + ' ' + (4 * k) }));
+        var handleRect = drawSvg.getBoundingClientRect();
+        var thinHandles = bb.w * handleRect.width / Math.max(1, view.w) < 20 ||
+          bb.h * handleRect.width / Math.max(1, view.w) < 20;
         handlePts(bb).forEach(function (h) {
           var name = h[0], hx = h[1], hy = h[2];
           if (selMode === 'scale') {
             ov.appendChild(el('rect', { x: hx - 4.5 * k, y: hy - 4.5 * k, width: 9 * k, height: 9 * k,
               fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
-          } else if (name.length === 2) {
+          } else if (name.length === 2 || thinHandles) {
             ov.appendChild(el('circle', { cx: hx, cy: hy, r: 5.5 * k, fill: '#fff', stroke: '#4f46e5', 'stroke-width': 1.4 * k }));
             ov.appendChild(el('path', { d: 'M ' + (hx - 2.5 * k) + ' ' + hy + ' A ' + (2.5 * k) + ' ' + (2.5 * k) + ' 0 1 1 ' + hx + ' ' + (hy + 2.5 * k),
               fill: 'none', stroke: '#4f46e5', 'stroke-width': 1.1 * k }));
@@ -1453,7 +1456,16 @@
         if (h) {
           if (selMode === 'scale') gesture = makeScale(so, bb, h, p);
           else if (h.length === 2) gesture = e.altKey ? makeDistort(so, bb, h) : makeRotate(so, bb, p);
-          else gesture = makeSkew(so, bb, h, p);
+          else {
+            var handleRect = drawSvg.getBoundingClientRect();
+            var thinGlyph = bb.w * handleRect.width / Math.max(1, view.w) < 20 ||
+              bb.h * handleRect.width / Math.max(1, view.w) < 20;
+            // У тонкого глифа боковые ручки не должны превращаться в недоступный наклон:
+            // используем их для поворота вокруг центра.
+            gesture = selMode === 'rotate' && thinGlyph
+              ? makeRotate(so, bb, p)
+              : makeSkew(so, bb, h, p);
+          }
           return;
         }
       }
