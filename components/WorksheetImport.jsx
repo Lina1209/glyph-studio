@@ -16,11 +16,23 @@ export default function WorksheetImport({ onImport, onPrint }) {
 
   const chooseFile = event => {
     const next = event.target.files?.[0] || null;
+    // Allow choosing the same file again after clearing/replacing it.
+    event.target.value = '';
+    if (next && !/^image\/(png|jpeg|webp)$/i.test(next.type)) {
+      setFile(null);
+      setPreviewUrl('');
+      setNote('Выберите изображение PNG, JPG или WebP.');
+      return;
+    }
+    if (next && next.size > 20 * 1024 * 1024) {
+      setFile(null);
+      setPreviewUrl('');
+      setNote('Файл слишком большой. Максимальный размер — 20 МБ.');
+      return;
+    }
     setFile(next);
     setPreviewUrl(next ? URL.createObjectURL(next) : '');
     setNote('');
-    // Allow choosing the same file again after clearing/replacing it.
-    event.target.value = '';
   };
 
   const importPage = async () => {
@@ -35,9 +47,7 @@ export default function WorksheetImport({ onImport, onPrint }) {
       const result = await scanWorksheetFile(file, page, { threshold });
       await onImport(result);
       const parts = [`Импортировано символов: ${result.glyphs.length}.`];
-      parts.push(result.aligned
-        ? `Лист выровнен по меткам (${result.marksFound}/4).`
-        : 'Метки не найдены — использовано масштабирование всего листа; точность может быть ниже.');
+      parts.push(`Лист успешно выровнен по четырём угловым меткам (${result.marksFound}/4).`);
       if (result.skipped?.length) parts.push(`Пропущены пустые/нечитаемые ячейки: ${result.skipped.join(' ')}.`);
       parts.push('Проверьте каждый знак в библиотеке — при необходимости дорисуйте его.');
       setNote(parts.join(' '));
