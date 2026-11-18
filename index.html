@@ -2934,25 +2934,47 @@
       var result = await worksheetApi.scanWorksheetFile(worksheetFile, Number($('worksheetPage').value || 0), {
         threshold: Number($('worksheetThreshold').value)
       });
+      if (!result || !Array.isArray(result.glyphs)) {
+        throw new Error('Распознавание вернуло некорректный список символов.');
+      }
       var replace = $('worksheetReplace').checked;
-      var imported = [], skippedExisting = [];
+      var imported = [], skippedExisting = [], staged = [], seenChars = Object.create(null);
+      // Prepare and validate every glyph before changing the library. A bad
+      // contour must not leave a half-imported worksheet in memory.
       result.glyphs.forEach(function (glyph) {
+        if (!glyph || typeof glyph.char !== 'string' || !glyph.char ||
+            Array.from(glyph.char).length > 2 || !Array.isArray(glyph.outlines)) {
+          throw new Error('В распознанном листе обнаружен некорректный символ.');
+        }
         var ch = glyph.char;
+        if (seenChars[ch]) throw new Error('Символ «' + ch + '» встретился в листе повторно.');
+        seenChars[ch] = true;
         if (!replace && glyphData[ch] && glyphData[ch].length) {
           skippedExisting.push(ch);
           return;
         }
-        var contours = (glyph.outlines || []).map(function (outline) {
-          var points = outline.map(function (p) { return [p.x * 0.36, 270 - p.y * 0.36]; });
+        var contours = glyph.outlines.map(function (outline) {
+          if (!Array.isArray(outline)) throw new Error('Некорректный контур символа «' + ch + '».');
+          var points = outline.map(function (p) {
+            if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+              throw new Error('Некорректные координаты символа «' + ch + '».');
+            }
+            return [p.x * 0.36, 270 - p.y * 0.36];
+          });
           return outlineToContour(points);
         }).filter(function (contour) { return contour.nodes.length >= 3; });
         if (!contours.length) return;
         normalizeContours(contours, 1);
+        staged.push({ char: ch, contours: contours });
+      });
+      // Apply only after the complete worksheet has passed validation.
+      staged.forEach(function (item) {
+        var ch = item.char;
         var previous = clone(glyphData[ch] || []);
         var history = histories[ch] || (histories[ch] = { u: [], r: [] });
         pushHistory(history.u, previous);
         history.r = [];
-        glyphData[ch] = [{ id: uid(), contours: contours }];
+        glyphData[ch] = [{ id: uid(), contours: item.contours }];
         edited[ch] = true;
         imported.push(ch);
       });
