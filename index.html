@@ -1378,11 +1378,13 @@
       };
     });
   }
-  function nodeDragGesture(o, nh, p) {
+  function nodeDragGesture(o, nh, p, e) {
+    var rect = drawSvg.getBoundingClientRect();
+    var threshold = e && e.pointerType === 'touch' ? 6 * view.w / Math.max(1, rect.width) : .4;
     return { type: 'node', snap: snap(), objId: o.id, ci: nh.ci, ni: nh.ni, start: p, delta: { x: 0, y: 0 }, moved: false,
       upd: function (pp) {
         this.delta = { x: pp.x - this.start.x, y: pp.y - this.start.y };
-        this.moved = Math.hypot(this.delta.x, this.delta.y) > .4;
+        this.moved = Math.hypot(this.delta.x, this.delta.y) > threshold;
       },
       fin: function () {
         if (!this.moved) return;
@@ -1415,9 +1417,11 @@
     if (hit) {
       var wasSel = sel === hit.id;
       if (!wasSel) { sel = hit.id; selMode = 'scale'; selNode = null; }
+      var selectRect = drawSvg.getBoundingClientRect();
+      var moveThreshold = e && e.pointerType === 'touch' ? 7 * view.w / Math.max(1, selectRect.width) : 2.5 * k;
       gesture = { type: 'moveOrToggle', snap: snap(), objId: hit.id, start: p, moved: false, map: null, toggle: wasSel,
         upd: function (pp) {
-          if (dist(pp, this.start) > 2.5 * k) this.moved = true;
+          if (dist(pp, this.start) > moveThreshold) this.moved = true;
           if (this.moved) {
             var dx = pp.x - this.start.x, dy = pp.y - this.start.y;
             this.map = function (q) { return { x: q.x + dx, y: q.y + dy }; };
@@ -1444,9 +1448,14 @@
           if (!handleHit && sn[w] && dist(p, sn[w]) < touchHitRadius(8)) handleHit = w;
         });
         if (handleHit) {
+          var handleRect = drawSvg.getBoundingClientRect();
+          var handleThreshold = e && e.pointerType === 'touch' ? 6 * view.w / Math.max(1, handleRect.width) : .4;
           gesture = { type: 'handle', snap: snap(), objId: so.id, ci: selNode.ci, ni: selNode.ni, which: handleHit,
-            pos: null, alt: false, moved: false,
-            upd: function (pp, ev) { this.pos = pp; this.alt = ev.altKey; this.moved = true; },
+            start: p, pos: null, alt: false, moved: false,
+            upd: function (pp, ev) {
+              if (dist(pp, this.start) > handleThreshold) { this.pos = pp; this.moved = true; }
+              this.alt = ev.altKey;
+            },
             fin: function () {
               if (!this.moved || !this.pos) return;
               var list = objs(), ob = null;
@@ -1470,7 +1479,7 @@
       if (nh) {
         if (dbl && selNode && selNode.ci === nh.ci && selNode.ni === nh.ni) { toggleSmooth(so, nh); return; }
         selNode = nh;
-        gesture = nodeDragGesture(so, nh, p);
+        gesture = nodeDragGesture(so, nh, p, e);
         updateProps(); renderCanvas();
         return;
       }
@@ -1483,7 +1492,7 @@
           return;
         }
         commit(function () { selNode = insertNodeAt(so, sh); });
-        gesture = nodeDragGesture(so, selNode, p);
+        gesture = nodeDragGesture(so, selNode, p, e);
         return;
       }
     }
