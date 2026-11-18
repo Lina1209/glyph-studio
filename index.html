@@ -1512,7 +1512,7 @@
         return;
       }
     }
-    var hit = hitObject(p, k);
+    var hit = hitObject(p, k, e);
     if (hit) { sel = hit.id; selNode = null; updateProps(); renderCanvas(); }
   }
   function toggleSmooth(o, nh) {
