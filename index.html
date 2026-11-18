@@ -1379,10 +1379,20 @@
     });
   }
   function makeRotate(o, bb, p0) {
-    var c = { x: bb.cx, y: bb.cy }, a0 = Math.atan2(p0.y - c.y, p0.x - c.x);
+    var c = { x: bb.cx, y: bb.cy };
+    var lastAngle = Math.atan2(p0.y - c.y, p0.x - c.x), totalAngle = 0;
     return transformGesture(o, function (p, e) {
-      var d = Math.atan2(p.y - c.y, p.x - c.x) - a0;
-      if (e.shiftKey) d = Math.round(d / (Math.PI / 12)) * (Math.PI / 12);
+      var angle = Math.atan2(p.y - c.y, p.x - c.x);
+      var delta = angle - lastAngle;
+      // Переход через границу -PI/PI не должен вызывать скачок почти на полный оборот.
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      totalAngle += delta;
+      lastAngle = angle;
+      // Накопление приращений позволяет вращать глиф и больше чем на 180/360 градусов.
+      var d = e && e.shiftKey
+        ? Math.round(totalAngle / (Math.PI / 12)) * (Math.PI / 12)
+        : totalAngle;
       var M = around(c, mR(d));
       return function (q) { return mApply(M, q); };
     });
