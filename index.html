@@ -1061,10 +1061,23 @@
     var best = null, bd = tol * tol;
     o.contours.forEach(function (c, ci) {
       var f = flattenContour(c, 2.5);
+      if (f.length < 2) return;
       for (var j = 0; j < f.length; j++) {
-        var q = f[j];
-        var d = (q.x - p.x) * (q.x - p.x) + (q.y - p.y) * (q.y - p.y);
-        if (d < bd) { bd = d; best = { ci: ci, seg: q.seg, t: q.t }; }
+        var a = f[j], b = f[(j + 1) % f.length];
+        // Ищем ближайшую точку на отрезке, а не только среди узлов
+        // аппроксимации: иначе на середине длинного участка промахивались.
+        var dx = b.x - a.x, dy = b.y - a.y;
+        var len2 = dx * dx + dy * dy;
+        if (len2 < 1e-12) continue;
+        var u = Math.max(0, Math.min(1,
+          ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+        var x = a.x + u * dx, y = a.y + u * dy;
+        var ex = p.x - x, ey = p.y - y, d = ex * ex + ey * ey;
+        if (d < bd) {
+          var t1 = a.t, t2 = (b.seg === a.seg) ? b.t : 1;
+          bd = d;
+          best = { ci: ci, seg: a.seg, t: t1 + (t2 - t1) * u };
+        }
       }
     });
     return best;
