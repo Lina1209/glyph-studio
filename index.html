@@ -268,13 +268,14 @@
       <input id="previewInput" type="text" autocomplete="off" spellcheck="false"
         class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-base focus:outline-none focus:border-indigo-500 mb-4"
         placeholder="Введите текст для проверки..." value="ПРИВЕТ"/>
-      <div class="w-full h-28 sm:h-32 flex-none bg-white rounded-xl px-3 sm:px-4 text-slate-900 overflow-x-auto overflow-y-hidden flex items-center justify-start border border-slate-600"
-           aria-label="Однострочный предпросмотр шрифта">
-        <div id="livePreviewOutput" class="inline-block whitespace-nowrap break-normal text-3xl sm:text-5xl leading-none"
+      <div class="w-full h-28 sm:h-32 flex-none bg-white rounded-xl px-3 sm:px-4 text-slate-900 overflow-x-auto overflow-y-hidden flex items-center justify-start border border-slate-600 select-text"
+           style="user-select:text;-webkit-user-select:text;touch-action:pan-x;"
+           aria-label="Однострочный предпросмотр шрифта. Можно выделить один или несколько знаков пальцем или мышью.">
+        <div id="livePreviewOutput" class="inline-block whitespace-nowrap break-normal text-3xl sm:text-5xl leading-none select-text"
              style="font-family:'LiveCustomFont',Georgia,sans-serif;">ПРИВЕТ</div>
       </div>
       <div class="flex items-center justify-between gap-2 mt-3">
-         <p class="text-[11px] text-slate-400">Ненарисованные буквы — обычным шрифтом.</p>
+         <p class="text-[11px] text-slate-400">Выделите знак или весь текст пальцем/мышью, затем скопируйте обычным способом.</p>
          <button id="copyPreviewBtn" type="button" class="pbtn !py-1.5 text-xs shrink-0">Копировать текст</button>
        </div>
        <p id="copyPreviewStatus" class="text-[11px] text-emerald-400 min-h-[1rem]" aria-live="polite"></p>
@@ -3149,6 +3150,10 @@
   previewInput.oninput = function () { livePreviewOutput.textContent = previewInput.value || ' '; };
   $('copyPreviewBtn').addEventListener('click', async function () {
     var value = previewInput.value || '';
+    var selection = window.getSelection ? window.getSelection() : null;
+    if (selection && selection.toString() && livePreviewOutput.contains(selection.anchorNode) && livePreviewOutput.contains(selection.focusNode)) {
+      value = selection.toString();
+    }
     if (!value) {
       $('copyPreviewStatus').textContent = 'Сначала введите текст для копирования.';
       return;
