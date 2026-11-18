@@ -1694,7 +1694,13 @@
       throw new Error('Не загрузился модуль точного стирания. Обновите страницу при подключённом интернете.');
     var list=objs(), scale=1000, cut=eraserClipPath(p,eraserR,scale);
     for (var oi=list.length-1;oi>=0;oi--) {
-      var o=list[oi], subject=[];
+      var o=list[oi];
+      // Быстрая проверка ограничивающего прямоугольника: далёкие объекты
+      // не отправляем в булеву операцию и сохраняем их исходные кривые Безье.
+      var bounds=bboxOf(o.contours);
+      if (!bounds || p.x+eraserR<bounds.x || p.x-eraserR>bounds.x2 ||
+          p.y+eraserR<bounds.y || p.y-eraserR>bounds.y2) continue;
+      var subject=[];
       for (var ci=0;ci<o.contours.length;ci++) {
         var path=contourToClipperPath(o.contours[ci],scale);
         if (path) subject.push(path);
