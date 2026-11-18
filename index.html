@@ -1460,7 +1460,17 @@
     if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
   }
   drawSvg.addEventListener('pointerup', pointerEnd);
-  drawSvg.addEventListener('pointercancel', pointerEnd);
+  drawSvg.addEventListener('pointercancel', function () {
+    // A cancelled touch/pen gesture must not partially modify a glyph.
+    var g = gesture;
+    gesture = null;
+    if (g && g.snap) restore(g.snap);
+    brushPts = null;
+    eraseChanged = false;
+    if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
+    renderCanvas();
+    updateProps();
+  });
   drawSvg.addEventListener('pointerleave', function (e) {
     if (tool === 'eraser') { eraserPos = null; renderCanvas(); }
     if (brushPts && e.buttons === 0) endBrush();
