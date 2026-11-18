@@ -265,11 +265,13 @@
     <section class="lg:col-span-3 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col min-h-[280px]">
       <h2 class="font-semibold text-slate-300 mb-2">Проверка шрифта</h2>
       <p class="text-xs text-slate-400 mb-3">Нарисуйте буквы и введите слово:</p>
-      <textarea id="previewInput" rows="3"
-        class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-indigo-500 mb-4"
-        placeholder="Введите текст...">ПРИВЕТ</textarea>
-      <div class="flex-1 bg-white rounded-xl p-4 text-slate-900 overflow-auto flex flex-col justify-center items-center border border-slate-600 min-h-[120px]">
-        <div id="livePreviewOutput" class="text-4xl sm:text-5xl break-all text-center leading-relaxed" style="font-family:'LiveCustomFont',Georgia,sans-serif;">ПРИВЕТ</div>
+      <input id="previewInput" type="text" autocomplete="off" spellcheck="false"
+        class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-base focus:outline-none focus:border-indigo-500 mb-4"
+        placeholder="Введите текст для проверки..." value="ПРИВЕТ"/>
+      <div class="w-full h-28 sm:h-32 flex-none bg-white rounded-xl px-3 sm:px-4 text-slate-900 overflow-x-auto overflow-y-hidden flex items-center justify-start border border-slate-600"
+           aria-label="Однострочный предпросмотр шрифта">
+        <div id="livePreviewOutput" class="inline-block whitespace-nowrap break-normal text-3xl sm:text-5xl leading-none"
+             style="font-family:'LiveCustomFont',Georgia,sans-serif;">ПРИВЕТ</div>
       </div>
       <p class="text-[11px] text-slate-400 mt-3 text-center">Ненарисованные буквы — обычным шрифтом.</p>
       <button id="clearAllBtn" class="mt-3 text-xs text-rose-400 hover:text-rose-300 underline">Очистить весь проект</button>
