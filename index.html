@@ -1363,6 +1363,7 @@
     pen.nodes = []; pen.dragging = false; pen.dragNode = null;
     currentChar = char;
     $('currentCharLabel').textContent = char;
+    if (typeof syncPassportForm === 'function') syncPassportForm();
     sel = null; selNode = null;
     renderGrid(); renderCanvas(); updateProps();
   }
