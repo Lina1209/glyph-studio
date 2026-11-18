@@ -717,7 +717,7 @@
   var tool = 'brush';
   var view = { x: 0, y: 0, w: 360 };
   var sel = null, selMode = 'scale', selNode = null;
-  var gesture = null, brushPts = null, spaceDown = false;
+  var gesture = null, brushPts = null, spaceDown = false, activePointerId = null;
   var pen = { nodes: [], cursor: null, dragging: false, dragNode: null };
   var eraserR = 18, eraserPos = null, eraseChanged = false;
   var liveFontUrl = null, modalOpen = false;
@@ -1474,6 +1474,10 @@
   drawSvg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   drawSvg.addEventListener('pointerdown', function (e) {
     if (modalOpen) return;
+    // Один активный указатель за раз: второй палец/перо не должен
+    // перезаписывать жест первого и смешивать две истории действий.
+    if (activePointerId !== null && activePointerId !== e.pointerId) return;
+    activePointerId = e.pointerId;
     e.preventDefault();
     try { drawSvg.setPointerCapture(e.pointerId); } catch (err) {}
     var p = pos(e);
@@ -1532,13 +1536,17 @@
       renderCanvas();
     }
   });
-  function pointerEnd() {
+  function pointerEnd(e) {
+    if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = null;
     if (gesture) { var g = gesture; gesture = null; g.fin(); renderCanvas(); updateProps(); }
     if (brushPts) endBrush();
     if (pen.dragging) { pen.dragging = false; pen.dragNode = null; }
   }
   drawSvg.addEventListener('pointerup', pointerEnd);
-  drawSvg.addEventListener('pointercancel', function () {
+  drawSvg.addEventListener('pointercancel', function (e) {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = null;
     // A cancelled touch/pen gesture must not partially modify a glyph.
     var g = gesture;
     gesture = null;
