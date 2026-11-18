@@ -908,6 +908,15 @@
     }
     return o.contours;
   }
+  var canvasRenderFrame = 0;
+  function queueCanvasRender() {
+    if (canvasRenderFrame) return;
+    var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    canvasRenderFrame = raf(function () {
+      canvasRenderFrame = 0;
+      renderCanvas();
+    });
+  }
   function renderCanvas() {
     drawSvg.innerHTML = '';
     var k = view.w / 360;
@@ -1517,14 +1526,14 @@
     if (modalOpen) return;
     if (activePointerId !== null && e.pointerId !== activePointerId) return;
     var p = pos(e);
-    if (tool === 'eraser') { eraserPos = p; if (!gesture) renderCanvas(); }
+    if (tool === 'eraser') { eraserPos = p; if (!gesture) queueCanvasRender(); }
     if (gesture) {
       e.preventDefault();
       gesture.upd(p, e);
-      renderCanvas();
+      queueCanvasRender();
       return;
     }
-    if (brushPts) { e.preventDefault(); brushPts.push([p.x, p.y, p.pressure]); renderCanvas(); return; }
+    if (brushPts) { e.preventDefault(); brushPts.push([p.x, p.y, p.pressure]); queueCanvasRender(); return; }
     if (tool === 'pen') {
       if (pen.dragging && pen.dragNode) {
         var n = pen.dragNode;
@@ -1534,7 +1543,7 @@
           n.smooth = true;
         }
       } else pen.cursor = p;
-      renderCanvas();
+      queueCanvasRender();
     }
   });
   function pointerEnd(e) {
@@ -2245,7 +2254,17 @@
     return new opentype.Font({familyName:familyName,styleName:'Regular',
       unitsPerEm:unitsPerEm,ascender:ascender,descender:descender,glyphs:glyphs});
   }
+  var liveFontTimer = null;
   function updateLiveFont() {
+    // При серии быстрых правок не пересобираем весь TTF на каждое действие.
+    // Показываем последнее состояние после короткой паузы в редактировании.
+    if (liveFontTimer) clearTimeout(liveFontTimer);
+    liveFontTimer = setTimeout(function () {
+      liveFontTimer = null;
+      rebuildLiveFont();
+    }, 180);
+  }
+  function rebuildLiveFont() {
     try {
       var drawn = Object.keys(glyphData).filter(function (k) { return glyphData[k] && glyphData[k].length; });
       if (!drawn.length) {
