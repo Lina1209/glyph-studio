@@ -1032,9 +1032,15 @@
     });
   }
   function selectChar(char) {
+    // Если пользователь переключил букву во время жеста (например, вторым
+    // пальцем), откатываем незавершённую геометрию до смены currentChar.
+    if (gesture && gesture.snap) restore(gesture.snap);
+    gesture = null; brushPts = null; eraseChanged = false;
+    activePointerId = null; eraserPos = null;
+    pen.nodes = []; pen.dragging = false; pen.dragNode = null;
     currentChar = char;
     $('currentCharLabel').textContent = char;
-    sel = null; selNode = null; gesture = null; brushPts = null; pen.nodes = [];
+    sel = null; selNode = null;
     renderGrid(); renderCanvas(); updateProps();
   }
 
