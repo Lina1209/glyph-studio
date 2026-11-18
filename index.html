@@ -2772,19 +2772,33 @@
     }
     var keys = Object.keys(data.glyphs);
     if (keys.length > 1000) throw new Error('В файле слишком много символов.');
+    var totalObjects = 0, totalContours = 0, totalNodes = 0;
     keys.forEach(function (ch) {
-      if (!ch || Array.from(ch).length > 2) throw new Error('Обнаружен некорректный ключ символа.');
-      var objects = data.glyphs[ch];
+      if (!ch || Array.from(ch).length > 2 || ch === '__proto__' ||
+          ch === 'prototype' || ch === 'constructor') {
+        throw new Error('Обнаружен некорректный ключ символа.');
+      }
+      var objects = data.glyphs[ch], objectIds = Object.create(null);
       if (!Array.isArray(objects)) throw new Error('Повреждён список объектов символа «' + ch + '».');
+      totalObjects += objects.length;
+      if (totalObjects > 20000) throw new Error('В файле слишком много объектов.');
       objects.forEach(function (obj) {
-        if (!obj || typeof obj !== 'object' || !Array.isArray(obj.contours)) {
-          throw new Error('Повреждён объект символа «' + ch + '».');
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+            typeof obj.id !== 'string' || !obj.id || obj.id.length > 128 ||
+            objectIds[obj.id] || !Array.isArray(obj.contours)) {
+          throw new Error('Повреждён объект символа «' + ch + '» или повторяется его идентификатор.');
         }
+        objectIds[obj.id] = true;
+        totalContours += obj.contours.length;
+        if (totalContours > 50000) throw new Error('В файле слишком много контуров.');
         obj.contours.forEach(function (contour) {
-          if (!contour || typeof contour !== 'object' || !Array.isArray(contour.nodes)) {
+          if (!contour || typeof contour !== 'object' || Array.isArray(contour) ||
+              !Array.isArray(contour.nodes)) {
             throw new Error('Повреждён контур символа «' + ch + '».');
           }
           if (contour.nodes.length > 20000) throw new Error('В контуре слишком много узлов.');
+          totalNodes += contour.nodes.length;
+          if (totalNodes > 250000) throw new Error('В резервной копии слишком много узлов для безопасного восстановления.');
           contour.nodes.forEach(function (node) {
             if (!validBackupPoint(node) ||
                 (node.hIn != null && !validBackupPoint(node.hIn)) ||
