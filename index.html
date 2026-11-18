@@ -1023,6 +1023,7 @@
   }
   var quotaWarned = false;
   var saveRevision = 0;
+  var lastProjectSavePromise = Promise.resolve(false);
   function setSaveStatus(label, title, stateClass) {
     var status = $('appStatus');
     if (!status) return;
@@ -1055,21 +1056,25 @@
       }
       console.warn('saveProject localStorage', e);
     }
-    queueProjectDBSave(payload).then(function () {
-      if (revision !== saveRevision) return;
-      if (localSaved) {
-        setSaveStatus('Сохранено', 'Проект записан в localStorage и IndexedDB.', 'saved');
-      } else {
-        setSaveStatus('Копия IDB', 'Основная копия localStorage недоступна; проект записан в IndexedDB. Скачайте JSON.', 'partial');
+    lastProjectSavePromise = queueProjectDBSave(payload).then(function () {
+      if (revision === saveRevision) {
+        if (localSaved) {
+          setSaveStatus('Сохранено', 'Проект записан в localStorage и IndexedDB.', 'saved');
+        } else {
+          setSaveStatus('Копия IDB', 'Основная копия localStorage недоступна; проект записан в IndexedDB. Скачайте JSON.', 'partial');
+        }
       }
+      return true;
     }).catch(function (err) {
       console.warn('saveProject IndexedDB', err);
-      if (revision !== saveRevision) return;
-      if (localSaved) {
-        setSaveStatus('Частично', 'localStorage обновлён, но IndexedDB не обновилась. Скачайте JSON.', 'partial');
-      } else {
-        setSaveStatus('Ошибка', 'Не удалось обновить ни localStorage, ни IndexedDB. Немедленно скачайте JSON.', 'error');
+      if (revision === saveRevision) {
+        if (localSaved) {
+          setSaveStatus('Частично', 'localStorage обновлён, но IndexedDB не обновилась. Скачайте JSON.', 'partial');
+        } else {
+          setSaveStatus('Ошибка', 'Не удалось обновить ни localStorage, ни IndexedDB. Немедленно скачайте JSON.', 'error');
+        }
       }
+      return false;
     });
     return localSaved;
   }
@@ -2807,7 +2812,7 @@
     }
     var reader = new FileReader();
     reader.onerror = function () { alert('Не удалось прочитать выбранный файл.'); };
-    reader.onload = function () {
+    reader.onload = async function () {
       try {
         var data = JSON.parse(String(reader.result || ''));
         validateProjectBackup(data);
@@ -2816,10 +2821,12 @@
         var previousGlyphs = glyphData, previousName = $('fontName').value;
         glyphData = clone(data.glyphs);
         $('fontName').value = data.fontName || 'MyHandwriting';
-        if (!saveProject()) {
+        var localSaved = saveProject();
+        var indexedDbSaved = await lastProjectSavePromise;
+        if (!localSaved && !indexedDbSaved) {
           glyphData = previousGlyphs;
           $('fontName').value = previousName;
-          alert('Не удалось сохранить восстановленный проект в браузере. Текущая работа оставлена без изменений.');
+          alert('Не удалось сохранить восстановленный проект ни в основной, ни в дополнительной копии. Текущая работа оставлена без изменений.');
           return;
         }
         Object.keys(histories).forEach(function (k) { delete histories[k]; });
