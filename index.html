@@ -56,6 +56,37 @@
     @media (max-width: 1023px) {
       .canvas-box { width: min(360px, calc(92vw - 64px)) !important; height: min(360px, calc(92vw - 64px)) !important; }
     }
+    @media (max-width: 640px) {
+      header { padding-left: .75rem !important; padding-right: .75rem !important; }
+      header > div:last-child { width: 100%; }
+      header > div:last-child > input { flex: 1 1 8rem; min-width: 0; }
+      header button { min-height: 44px; }
+      main { padding: .75rem !important; gap: .75rem !important; }
+      main > section { min-width: 0; padding: .75rem !important; }
+      main > section:first-child { height: 300px !important; }
+      .canvas-box {
+        width: min(360px, calc(100vw - 112px)) !important;
+        height: min(360px, calc(100vw - 112px)) !important;
+        flex: 0 0 auto;
+      }
+      #toolbox { flex-direction: column; flex: 0 0 44px; }
+      .tool-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+      .glyph-btn { min-height: 44px; }
+      .pbtn, .tab-btn { min-height: 44px; padding-left: .7rem; padding-right: .7rem; }
+      .prop-in { min-height: 40px; font-size: 16px; }
+      input[type="range"] { min-height: 36px; }
+      #previewInput { font-size: 16px; }
+      details summary { min-height: 36px; display: flex; align-items: center; }
+    }
+    @media (max-width: 360px) {
+      .canvas-box {
+        width: min(360px, calc(100vw - 104px)) !important;
+        height: min(360px, calc(100vw - 104px)) !important;
+      }
+      main > section { padding: .625rem !important; }
+      #toolbox { flex-basis: 40px; }
+      .tool-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
+    }
     #toolbox { display: flex; flex-direction: column; gap: 4px; }
     .tool-btn { width: 2.4rem; height: 2.4rem; display: flex; align-items: center; justify-content: center;
       border-radius: .5rem; border: 1px solid transparent; color: #cbd5e1; background: transparent; cursor: pointer; }
