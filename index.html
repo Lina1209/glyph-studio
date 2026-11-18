@@ -91,6 +91,9 @@
       <input id="fontName" type="text" value="MyHandwriting" placeholder="Название шрифта"
         class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm w-36 sm:w-44 focus:outline-none focus:border-indigo-500" />
       <button id="saveProjectBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm" title="Сохранить в браузер">💾</button>
+      <button id="exportProjectBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm" title="Скачать резервную копию проекта">⬇️ JSON</button>
+      <button id="importProjectBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm" title="Восстановить проект из резервной копии">⬆️ JSON</button>
+      <input id="projectFileInput" type="file" accept=".json,application/json" class="hidden" />
       <button id="downloadBtn"
         class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-3 sm:px-4 py-1.5 rounded-lg text-sm transition shadow-lg shadow-indigo-500/20">
         Скачать .TTF
@@ -2336,6 +2339,109 @@
     else alert('Не удалось сохранить проект. Скачайте TTF и освободите место в хранилище браузера.');
   };
   $('fontName').addEventListener('change', saveProject);
+
+  function exportProjectBackup() {
+    var payload = {
+      format: 'GlyphStudioProject',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      fontName: $('fontName').value || 'MyHandwriting',
+      glyphs: glyphData
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'GlyphStudio-project-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  function validBackupPoint(p) {
+    return !!p && typeof p === 'object' && Number.isFinite(p.x) && Number.isFinite(p.y);
+  }
+  function validateProjectBackup(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data) ||
+        data.format !== 'GlyphStudioProject' || data.version !== 1 ||
+        !data.glyphs || typeof data.glyphs !== 'object' || Array.isArray(data.glyphs)) {
+      throw new Error('Файл не похож на резервную копию GlyphStudio или имеет неподдерживаемую версию.');
+    }
+    var keys = Object.keys(data.glyphs);
+    if (keys.length > 1000) throw new Error('В файле слишком много символов.');
+    keys.forEach(function (ch) {
+      if (!ch || Array.from(ch).length > 2) throw new Error('Обнаружен некорректный ключ символа.');
+      var objects = data.glyphs[ch];
+      if (!Array.isArray(objects)) throw new Error('Повреждён список объектов символа «' + ch + '».');
+      objects.forEach(function (obj) {
+        if (!obj || typeof obj !== 'object' || !Array.isArray(obj.contours)) {
+          throw new Error('Повреждён объект символа «' + ch + '».');
+        }
+        obj.contours.forEach(function (contour) {
+          if (!contour || typeof contour !== 'object' || !Array.isArray(contour.nodes)) {
+            throw new Error('Повреждён контур символа «' + ch + '».');
+          }
+          if (contour.nodes.length > 20000) throw new Error('В контуре слишком много узлов.');
+          contour.nodes.forEach(function (node) {
+            if (!validBackupPoint(node) ||
+                (node.hIn != null && !validBackupPoint(node.hIn)) ||
+                (node.hOut != null && !validBackupPoint(node.hOut))) {
+              throw new Error('Обнаружены некорректные координаты в символе «' + ch + '».');
+            }
+          });
+        });
+      });
+    });
+    if (data.fontName != null && typeof data.fontName !== 'string') {
+      throw new Error('Некорректное название шрифта в резервной копии.');
+    }
+    return true;
+  }
+  $('exportProjectBtn').onclick = function () {
+    try { exportProjectBackup(); }
+    catch (err) { alert('Не удалось создать резервную копию: ' + (err.message || err)); }
+  };
+  $('importProjectBtn').onclick = function () { $('projectFileInput').click(); };
+  $('projectFileInput').addEventListener('change', function (event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Файл слишком большой. Максимальный размер резервной копии — 25 МБ.');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onerror = function () { alert('Не удалось прочитать выбранный файл.'); };
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(String(reader.result || ''));
+        validateProjectBackup(data);
+        var count = Object.keys(data.glyphs).length;
+        if (!confirm('Восстановить резервную копию? Текущий проект будет заменён. Символов в файле: ' + count + '. Перед продолжением рекомендуется скачать текущую копию кнопкой «⬇️ JSON».')) return;
+        var previousGlyphs = glyphData, previousName = $('fontName').value;
+        glyphData = clone(data.glyphs);
+        $('fontName').value = data.fontName || 'MyHandwriting';
+        if (!saveProject()) {
+          glyphData = previousGlyphs;
+          $('fontName').value = previousName;
+          alert('Не удалось сохранить восстановленный проект в браузере. Текущая работа оставлена без изменений.');
+          return;
+        }
+        Object.keys(histories).forEach(function (k) { delete histories[k]; });
+        legacy = null; edited = {};
+        sel = null; selNode = null; gesture = null; brushPts = null;
+        eraseChanged = false; activePointerId = null; eraserPos = null;
+        pen.nodes = []; pen.dragging = false; pen.dragNode = -1;
+        currentChar = Object.keys(glyphData).find(function (ch) { return glyphData[ch] && glyphData[ch].length; }) || 'А';
+        renderGrid(); renderCanvas(); updateLiveFont(); updateProps();
+        alert('Резервная копия восстановлена. Символов: ' + count + '.');
+      } catch (err) {
+        alert('Не удалось восстановить проект: ' + (err.message || err));
+      }
+    };
+    reader.readAsText(file);
+  });
+
   $('clearAllBtn').onclick = function () {
     if (!confirm('Удалить все нарисованные буквы?')) return;
     Object.keys(glyphData).forEach(function (k) { delete glyphData[k]; });
