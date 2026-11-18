@@ -12,6 +12,14 @@ const ASSETS = [
   './icon-512.png',
   './apple-touch-icon.png'
 ];
+const OPTIONAL_ASSETS = [
+  'https://cdn.tailwindcss.com',
+  'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js',
+  'https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js',
+  'https://cdn.jsdelivr.net/npm/perfect-freehand@1.2.2/+esm',
+  'https://esm.sh/perfect-freehand@1.2.2',
+  'https://cdn.skypack.dev/perfect-freehand@1.2.2'
+];
 const CDN_HOSTS = new Set([
   'cdn.tailwindcss.com',
   'cdn.jsdelivr.net',
@@ -24,7 +32,23 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE)
       .then(cache => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting())
+      .then(async () => {
+        // Warm up the external libraries during installation, so the first
+        // successful online visit can be followed by an offline launch.
+        // CDN failures are non-fatal: the local editor shell must still install.
+        const runtime = await caches.open(RUNTIME_CACHE);
+        await Promise.all(OPTIONAL_ASSETS.map(async url => {
+          try {
+            const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+            if (response.ok || response.type === 'opaque') {
+              await runtime.put(url, response);
+            }
+          } catch (error) {
+            // Keep the PWA installable even when one CDN is unavailable.
+          }
+        }));
+        return self.skipWaiting();
+      })
   );
 });
 
