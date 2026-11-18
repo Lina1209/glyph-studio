@@ -2693,13 +2693,21 @@
       }
       if (!has || !mapped.length) continue;
       var sideBearing=16*scale;
+      var codePoint=char.codePointAt(0);
+      if (Array.from(char).length !== 1 || !Number.isInteger(codePoint) ||
+          codePoint < 0 || codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
+        console.warn('Пропущен символ с некорректным Unicode-кодом:', char);
+        continue;
+      }
+      // OpenType cmap uses the full Unicode code point, not the first UTF-16
+      // code unit. This keeps supplementary-plane characters correctly mapped.
       var shiftX=(isFinite(minX)?minX:0)-sideBearing;
       for (var mi=0;mi<mapped.length;mi++)
         appendTrueTypeContour(fontPath,mapped[mi],scale,baselineY,shiftX);
       var width=Math.max(120,Math.round(maxX-shiftX+sideBearing));
       glyphs.push(new opentype.Glyph({
-        name:'uni'+char.charCodeAt(0).toString(16).toUpperCase(),
-        unicode:char.charCodeAt(0),advanceWidth:width,path:fontPath
+        name:'uni'+codePoint.toString(16).toUpperCase().padStart(4,'0'),
+        unicode:codePoint,advanceWidth:width,path:fontPath
       }));
     }
     var familyName=$('fontName').value.trim()||'MyHandwriting';
