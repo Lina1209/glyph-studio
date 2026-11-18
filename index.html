@@ -1039,7 +1039,8 @@
        stateClass === 'partial' ? 'text-amber-300 bg-amber-950/50 border-amber-800' :
        'text-slate-300 bg-slate-900 border-slate-700');
   }
-  function saveProject() {
+  function saveProject(options) {
+    options = options || {};
     var revision = ++saveRevision;
     var payload = {
       fontName: $('fontName').value,
@@ -1055,7 +1056,9 @@
     } catch (e) {
       if (!quotaWarned) {
         quotaWarned = true;
-        alert('Не удалось сохранить основную копию в браузере (возможно, закончилось место). Проверяется дополнительное сохранение в IndexedDB. Скачайте резервную копию кнопкой «⬇️ JSON».');
+        if (!options.silent) {
+          alert('Не удалось сохранить основную копию в браузере (возможно, закончилось место). Проверяется дополнительное сохранение в IndexedDB. Скачайте резервную копию кнопкой «⬇️ JSON».');
+        }
       }
       console.warn('saveProject localStorage', e);
     }
@@ -1081,6 +1084,23 @@
     });
     return localSaved;
   }
+
+  // Browsers may suspend or discard a mobile tab without giving IndexedDB
+  // enough time to finish. On the last lifecycle transition, write the
+  // synchronous localStorage copy immediately and queue the IDB copy too.
+  var exitCheckpointTaken = false;
+  function saveExitCheckpoint() {
+    if (exitCheckpointTaken) return;
+    exitCheckpointTaken = true;
+    saveProject({ silent: true });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saveExitCheckpoint();
+    else exitCheckpointTaken = false;
+  });
+  window.addEventListener('pagehide', saveExitCheckpoint);
+  window.addEventListener('beforeunload', saveExitCheckpoint);
+  window.addEventListener('pageshow', function () { exitCheckpointTaken = false; });
 
   /* ================= Вид ================= */
   function setViewBox() {
