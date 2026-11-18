@@ -1,11 +1,13 @@
-const CACHE = 'glyphstudio-v6';
-const RUNTIME_CACHE = 'glyphstudio-runtime-v6';
+const CACHE = 'glyphstudio-v7';
+const RUNTIME_CACHE = 'glyphstudio-runtime-v7';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './lib/project.js',
   './lib/worksheet.js',
+  './lib/clipper.js',
+  './lib/CLIPPER-LICENSE.txt',
   './icon-192.png',
   './icon-512.png',
   './apple-touch-icon.png'
