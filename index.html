@@ -241,6 +241,43 @@
     </section>
   </main>
 
+
+  <section class="max-w-7xl w-full mx-auto px-4 sm:px-6 pb-6">
+    <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div><h2 class="font-semibold text-slate-200">✍️ Рукописный бланк</h2>
+          <p class="text-xs text-slate-400 mt-1">Распечатайте лист, впишите символы и загрузите фото — распознанные контуры попадут прямо в библиотеку глифов.</p></div>
+        <span id="worksheetStatus" class="text-xs text-slate-400" role="status" aria-live="polite">Подключение модуля…</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+        <button id="worksheetPrintBtn" type="button" class="pbtn !py-2">▤ Печать всех страниц</button>
+        <button id="worksheetDownloadBtn" type="button" class="pbtn !py-2">⇩ Скачать страницу SVG</button>
+        <label class="text-xs text-slate-300">Страница бланка
+          <select id="worksheetPage" class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm" disabled><option>Загрузка…</option></select>
+        </label>
+        <label class="text-xs text-slate-300">Фото или скан
+          <input id="worksheetFile" type="file" accept="image/png,image/jpeg,image/webp" class="block w-full mt-1 text-xs text-slate-300 file:bg-indigo-600 file:text-white file:border-0 file:rounded file:px-2 file:py-1.5"/>
+        </label>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+        <label class="text-xs text-slate-300">Чувствительность распознавания: <span id="worksheetThresholdVal">128</span>
+          <input id="worksheetThreshold" type="range" min="60" max="200" value="128" class="block w-full mt-2"/>
+          <span class="block text-[10px] text-slate-500">Повышайте, если ручка или карандаш очень светлые.</span>
+        </label>
+        <label class="flex items-center gap-2 text-xs text-slate-300 mt-1 sm:mt-5">
+          <input id="worksheetReplace" type="checkbox" class="accent-indigo-500"/>
+          Заменять уже нарисованные глифы (иначе они будут пропущены)
+        </label>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 mt-3">
+        <button id="worksheetRecognizeBtn" type="button" class="pbtn !bg-indigo-600 !border-indigo-500 !py-2" disabled>⇧ Распознать и добавить в библиотеку</button>
+        <span id="worksheetResult" class="text-xs text-slate-300" aria-live="polite"></span>
+      </div>
+      <img id="worksheetPreview" class="hidden mt-4 max-h-72 max-w-full rounded-lg border border-slate-600 bg-white object-contain" alt="Предпросмотр загруженного бланка"/>
+      <p class="text-[10px] text-slate-500 mt-3">Важно: чёрные угловые метки должны полностью попасть на фото. Результат распознавания нужно проверить в редакторе — качество зависит от освещения, контраста и ровности снимка.</p>
+    </div>
+  </section>
+
   <footer class="border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-500">
     GlyphStudio · рукописные шрифты в браузере · MIT
   </footer>
@@ -2024,8 +2061,17 @@
   function updateLiveFont() {
     try {
       var drawn = Object.keys(glyphData).filter(function (k) { return glyphData[k] && glyphData[k].length; });
-      if (!drawn.length) return;
-      if (typeof opentype === 'undefined') return;
+      if (!drawn.length) {
+        if (liveFontUrl) { URL.revokeObjectURL(liveFontUrl); liveFontUrl = null; }
+        var emptyStyle = document.getElementById('dynamic-font-style');
+        if (emptyStyle) emptyStyle.remove();
+        livePreviewOutput.style.fontFamily = 'Georgia, sans-serif';
+        return;
+      }
+      if (typeof opentype === 'undefined') {
+        livePreviewOutput.style.fontFamily = 'Georgia, sans-serif';
+        return;
+      }
       var font = buildOpenTypeFont();
       var blob = new Blob([font.toArrayBuffer()], { type: 'font/ttf' });
       if (liveFontUrl) URL.revokeObjectURL(liveFontUrl);
@@ -2063,6 +2109,119 @@
     saveProject(); renderCanvas(); renderGrid(); updateLiveFont(); updateProps();
   };
   previewInput.oninput = function () { livePreviewOutput.textContent = previewInput.value || ' '; };
+  /* ================= Импорт рукописного бланка ================= */
+  var worksheetApi = null, worksheetFile = null, worksheetPreviewUrl = null;
+  var worksheetApiPromise = import('./lib/worksheet.js').then(function (api) {
+    worksheetApi = api;
+    var select = $('worksheetPage');
+    select.innerHTML = '';
+    api.SHEET_PAGES.forEach(function (chars, index) {
+      var option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = 'Страница ' + (index + 1) + ' — ' + chars[0] + '…' + chars[chars.length - 1];
+      select.appendChild(option);
+    });
+    select.disabled = false;
+    $('worksheetRecognizeBtn').disabled = !worksheetFile;
+    $('worksheetStatus').textContent = '✔ Модуль подключён · ' + api.WORKSHEET_CHARS.length + ' символов';
+    return api;
+  }).catch(function (err) {
+    $('worksheetStatus').textContent = '⚠ Модуль бланка не загрузился';
+    $('worksheetResult').textContent = err.message || String(err);
+    throw err;
+  });
+  // Keep the failed import handled even if the user never opens the worksheet panel.
+  worksheetApiPromise.catch(function () {});
+  $('worksheetThreshold').addEventListener('input', function () {
+    $('worksheetThresholdVal').textContent = $('worksheetThreshold').value;
+  });
+  $('worksheetFile').addEventListener('change', function (event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!/^image\\/(png|jpeg|webp)$/i.test(file.type)) {
+      $('worksheetResult').textContent = 'Выберите изображение PNG, JPG или WebP.';
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      $('worksheetResult').textContent = 'Файл слишком большой. Максимальный размер — 20 МБ.';
+      return;
+    }
+    worksheetFile = file;
+    if (worksheetPreviewUrl) URL.revokeObjectURL(worksheetPreviewUrl);
+    worksheetPreviewUrl = URL.createObjectURL(file);
+    $('worksheetPreview').src = worksheetPreviewUrl;
+    $('worksheetPreview').classList.remove('hidden');
+    $('worksheetRecognizeBtn').disabled = !worksheetApi;
+    $('worksheetResult').textContent = 'Файл загружен: ' + file.name;
+  });
+  $('worksheetPrintBtn').addEventListener('click', function () {
+    // Open synchronously from the user gesture so mobile browsers do not block the print tab.
+    var printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      $('worksheetResult').textContent = 'Разрешите всплывающие окна для печати бланка.';
+      return;
+    }
+    worksheetApiPromise.then(function (api) { api.openWorksheetPrint(printWindow); })
+      .catch(function (err) { printWindow.close(); $('worksheetResult').textContent = err.message || String(err); });
+  });
+  $('worksheetDownloadBtn').addEventListener('click', function () {
+    worksheetApiPromise.then(function (api) { api.downloadWorksheetSvg(Number($('worksheetPage').value || 0)); })
+      .catch(function (err) { $('worksheetResult').textContent = err.message || String(err); });
+  });
+  $('worksheetRecognizeBtn').addEventListener('click', async function () {
+    if (!worksheetFile || !worksheetApi || this.disabled) return;
+    var button = this;
+    button.disabled = true;
+    $('worksheetResult').textContent = 'Распознаю символы… Не закрывайте страницу.';
+    try {
+      var result = await worksheetApi.scanWorksheetFile(worksheetFile, Number($('worksheetPage').value || 0), {
+        threshold: Number($('worksheetThreshold').value)
+      });
+      var replace = $('worksheetReplace').checked;
+      var imported = [], skippedExisting = [];
+      result.glyphs.forEach(function (glyph) {
+        var ch = glyph.char;
+        if (!replace && glyphData[ch] && glyphData[ch].length) {
+          skippedExisting.push(ch);
+          return;
+        }
+        var contours = (glyph.outlines || []).map(function (outline) {
+          var points = outline.map(function (p) { return [p.x * 0.36, 270 - p.y * 0.36]; });
+          return outlineToContour(points);
+        }).filter(function (contour) { return contour.nodes.length >= 3; });
+        if (!contours.length) return;
+        normalizeContours(contours, 1);
+        var previous = clone(glyphData[ch] || []);
+        var history = histories[ch] || (histories[ch] = { u: [], r: [] });
+        history.u.push(previous);
+        if (history.u.length > 60) history.u.shift();
+        history.r = [];
+        glyphData[ch] = [{ id: uid(), contours: contours }];
+        edited[ch] = true;
+        imported.push(ch);
+      });
+      saveProject();
+      renderGrid();
+      updateLiveFont();
+      if (imported.length) {
+        currentChar = imported[0];
+        sel = null; selNode = null; pen.nodes = [];
+        $('currentCharLabel').textContent = currentChar;
+        renderCanvas(); updateProps(); renderGrid();
+      }
+      var parts = ['Добавлено в библиотеку: ' + imported.length + '.'];
+      if (skippedExisting.length) parts.push('Уже существовали и не заменены: ' + skippedExisting.join(' ')+'.');
+      if (result.skipped.length) parts.push('Пустые ячейки: ' + result.skipped.join(' ')+'.');
+      parts.push(result.aligned ? 'Лист выровнен по четырём меткам.' : 'Угловые метки распознаны не все — использовано приблизительное выравнивание.');
+      $('worksheetResult').textContent = parts.join(' ');
+    } catch (err) {
+      $('worksheetResult').textContent = 'Ошибка распознавания: ' + (err.message || String(err));
+    } finally {
+      button.disabled = !worksheetFile;
+    }
+  });
+
   document.querySelectorAll('.set-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
       document.querySelectorAll('.set-btn').forEach(function (b) { b.className = 'set-btn text-xs px-2 py-1 rounded bg-slate-700'; });
