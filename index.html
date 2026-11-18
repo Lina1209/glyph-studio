@@ -851,8 +851,14 @@
       localStorage.setItem(KEY2, JSON.stringify({
         fontName: $('fontName').value, glyphs: glyphData, savedAt: new Date().toISOString()
       }));
+      return true;
     } catch (e) {
-      if (!quotaWarned) { quotaWarned = true; alert('Хранилище браузера переполнено — скачайте TTF, чтобы не потерять работу.'); }
+      if (!quotaWarned) {
+        quotaWarned = true;
+        alert('Не удалось сохранить проект в браузере (возможно, закончилось место). Скачайте резервный файл шрифта TTF и освободите место в хранилище.');
+      }
+      console.warn('saveProject', e);
+      return false;
     }
   }
 
@@ -2319,7 +2325,10 @@
   };
 
   /* ================= Прочее ================= */
-  $('saveProjectBtn').onclick = function () { saveProject(); alert('Проект сохранён в браузере'); };
+  $('saveProjectBtn').onclick = function () {
+    if (saveProject()) alert('Проект сохранён в браузере.');
+    else alert('Не удалось сохранить проект. Скачайте TTF и освободите место в хранилище браузера.');
+  };
   $('fontName').addEventListener('change', saveProject);
   $('clearAllBtn').onclick = function () {
     if (!confirm('Удалить все нарисованные буквы?')) return;
