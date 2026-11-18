@@ -38,13 +38,21 @@ self.addEventListener('install', event => {
         // CDN failures are non-fatal: the local editor shell must still install.
         const runtime = await caches.open(RUNTIME_CACHE);
         await Promise.all(OPTIONAL_ASSETS.map(async url => {
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
           try {
-            const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+            const response = await fetch(url, {
+              mode: 'cors',
+              credentials: 'omit',
+              signal: controller ? controller.signal : undefined
+            });
             if (response.ok || response.type === 'opaque') {
               await runtime.put(url, response);
             }
           } catch (error) {
             // Keep the PWA installable even when one CDN is unavailable.
+          } finally {
+            if (timeout) clearTimeout(timeout);
           }
         }));
         return self.skipWaiting();
