@@ -3309,6 +3309,10 @@
     worksheetApiPromise.then(function (api) { api.openWorksheetPrint(printWindow); })
       .catch(function (err) { printWindow.close(); $('worksheetResult').textContent = err.message || String(err); });
   });
+  $('libraryWorksheetPrintBtn').addEventListener('click', function () {
+    // Reuse the same tested print/download flow from the handwriting worksheet panel.
+    $('worksheetPrintBtn').click();
+  });
   $('worksheetDownloadBtn').addEventListener('click', function () {
     worksheetApiPromise.then(function (api) { api.downloadWorksheetSvg(Number($('worksheetPage').value || 0)); })
       .catch(function (err) { $('worksheetResult').textContent = err.message || String(err); });
