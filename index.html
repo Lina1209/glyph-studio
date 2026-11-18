@@ -2332,14 +2332,17 @@
       b.textContent = item.label;
       b.title = 'Вставить «' + item.label + '» из моей коллекции';
       b.onclick = function () {
-        pendingContours = clone(item.contours);
         switchTab('symbol');
         $('symChar').value = currentChar;
-        regenPreview();
-        if (pendingContours) {
-          $('importPreview').setAttribute('aria-label', 'Предпросмотр глифа из моей коллекции');
-          $('insertBtn').disabled = false;
-        }
+        pendingContours = clone(item.contours);
+        normalizeContours(pendingContours, 1);
+        var pv = $('importPreview');
+        pv.innerHTML = '';
+        pv.appendChild(el('line', { x1: 0, y1: 70, x2: 360, y2: 70, stroke: '#cbd5e1', 'stroke-dasharray': '4 4' }));
+        pv.appendChild(el('line', { x1: 0, y1: 145, x2: 360, y2: 145, stroke: '#cbd5e1', 'stroke-dasharray': '4 4' }));
+        pv.appendChild(el('line', { x1: 0, y1: 270, x2: 360, y2: 270, stroke: '#f43f5e', 'stroke-width': 1.5 }));
+        pv.appendChild(el('path', { d: contoursD(pendingContours), fill: '#0f172a', 'fill-rule': 'nonzero' }));
+        $('insertBtn').disabled = false;
       };
       var del = document.createElement('button');
       del.type = 'button';
@@ -2399,7 +2402,6 @@
         regenPreview();
       };
       grid.appendChild(b);
-    });
     });
     renderGlyphCollection();
   }
