@@ -1681,9 +1681,33 @@
     for (var i=0;i<paths.length;i++) {
       var path=paths[i];
       if (!path || path.length<3 || Math.abs(ClipperLib.Clipper.Area(path))<.5) continue;
-      contours.push({nodes:path.map(function(q) {
-        return {x:q.X/scale,y:q.Y/scale,smooth:false,hIn:null,hOut:null};
-      })});
+      var pts=path.map(function(q) { return {x:q.X/scale,y:q.Y/scale}; });
+      var nodes=pts.map(function(p) {
+        return {x:p.x,y:p.y,smooth:false,hIn:null,hOut:null};
+      });
+      // Clipper возвращает ломаную. Восстанавливаем плавные участки
+      // локальными кубическими Безье, но сохраняем выраженные углы рун.
+      for (var j=0;j<pts.length;j++) {
+        var prev=pts[(j+pts.length-1)%pts.length];
+        var cur=pts[j], next=pts[(j+1)%pts.length];
+        var ax=cur.x-prev.x, ay=cur.y-prev.y;
+        var bx=next.x-cur.x, by=next.y-cur.y;
+        var al=Math.hypot(ax,ay), bl=Math.hypot(bx,by);
+        if (al<1e-6 || bl<1e-6) continue;
+        var dot=(ax*bx+ay*by)/(al*bl);
+        // Угол поворота до ~39° считаем частью плавной кривой.
+        // Более острые вершины остаются настоящими угловыми узлами.
+        if (dot<.78) continue;
+        var tx=next.x-prev.x, ty=next.y-prev.y;
+        var tl=Math.hypot(tx,ty);
+        if (tl<1e-6) continue;
+        var handle=Math.min(al,bl)*.22;
+        var ux=tx/tl, uy=ty/tl;
+        nodes[j].smooth=true;
+        nodes[j].hIn={x:cur.x-ux*handle,y:cur.y-uy*handle};
+        nodes[j].hOut={x:cur.x+ux*handle,y:cur.y+uy*handle};
+      }
+      contours.push({nodes:nodes});
     }
     return contours;
   }
