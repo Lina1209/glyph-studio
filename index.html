@@ -1431,6 +1431,10 @@
       if (before-after<=.5) continue;
       o.contours=clipperPathsToContours(solution,scale);
       eraseChanged=true;
+      // После булевой операции индексы старых узлов больше не соответствуют
+      // новым контурам — снимаем точечное выделение, чтобы команды узлов
+      // не обращались к устаревшим координатам.
+      if (sel===o.id) selNode=null;
       if (!o.contours.length) {
         list.splice(oi,1);
         if (sel===o.id) { sel=null; selNode=null; }
@@ -1558,8 +1562,14 @@
   /* ================= Панель свойств ================= */
   var CURSORS = { select: 'default', node: 'default', pen: 'crosshair', brush: 'crosshair', eraser: 'none', hand: 'grab' };
   function setTool(t) {
+    // Смена инструмента во время активного жеста должна отменять его целиком.
+    // Особенно важно для ластика: иначе уже вырезанная часть могла остаться
+    // без записи в истории Undo.
+    if (gesture && gesture.snap) restore(gesture.snap);
+    gesture = null;
+    eraseChanged = false;
     tool = t;
-    pen.nodes = []; pen.dragging = false; brushPts = null; eraserPos = null; gesture = null;
+    pen.nodes = []; pen.dragging = false; brushPts = null; eraserPos = null;
     document.querySelectorAll('.tool-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.tool === t); });
     drawSvg.style.cursor = CURSORS[t] || 'default';
     updateProps(); renderCanvas();
