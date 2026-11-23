@@ -2960,9 +2960,19 @@
     e.target.value = '';
   });
   function loadPngFile(file) {
+    // Reject oversized source images before canvas/readback allocation. This guard is post-decode.
+    if (file && file.size > 50 * 1024 * 1024) {
+      alert('Файл изображения слишком большой (максимум 50 МБ).');
+      return;
+    }
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
+      if (!img.width || !img.height || img.width * img.height > 40000000) {
+        URL.revokeObjectURL(url);
+        alert('Изображение слишком большое для импорта (максимум 40 млн пикселей).');
+        return;
+      }
       var s = Math.min(1, 360 / Math.max(img.width, img.height));
       var w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s));
       var cv = document.createElement('canvas');
