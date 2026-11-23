@@ -2649,12 +2649,18 @@
     // SVG parsed with DOMParser is inert, but becomes active when inserted into
     // the live document. Strip executable content and all external references
     // before attaching it for geometric measurements.
-    var blocked = root.querySelectorAll('script,foreignObject,iframe,object,embed,image,use,a,animate,animateMotion,animateTransform,set,feImage,video,audio');
-    for (var bi = blocked.length - 1; bi >= 0; bi--) blocked[bi].remove();
+    var blockedTags = Object.create(null);
+    'script,foreignObject,iframe,object,embed,image,use,a,animate,animateMotion,animateTransform,set,feImage,video,audio'
+      .split(',').forEach(function (tag) { blockedTags[tag.toLowerCase()] = true; });
     var nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
+    // Use localName as well as tagName so namespace-prefixed SVG elements are covered.
+    for (var bi = nodes.length - 1; bi > 0; bi--) {
+      var blockedName = (nodes[bi].localName || nodes[bi].tagName || '').toLowerCase();
+      if (blockedTags[blockedName]) { nodes[bi].remove(); nodes.splice(bi, 1); }
+    }
     for (var ni = 0; ni < nodes.length; ni++) {
       var node = nodes[ni];
-      if (node.tagName && node.tagName.toLowerCase() === 'style') {
+      if (node.localName && node.localName.toLowerCase() === 'style') {
         node.textContent = node.textContent
           .replace(/@import\s+[^;]+;?/gi, '')
           .replace(/url\(\s*(['"]?)(?!#)[^)]+\)/gi, 'none')
