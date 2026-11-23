@@ -2705,11 +2705,13 @@
     try {
       var shapes = svgClone.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon');
       if (shapes.length > 2000) throw new Error('В SVG слишком много графических элементов (максимум 2000).');
-      var totalSamples = 0;
+      var totalSamples = 0, totalPathChars = 0;
       for (var si = 0; si < shapes.length; si++) {
         var sh = shapes[si];
         var d = shapeToD(sh);
         if (!d) continue;
+        totalPathChars += d.length;
+        if (totalPathChars > 2000000) throw new Error('В SVG слишком много данных контуров. Упростите файл перед импортом.');
         var pEl = sh;
         if (sh.tagName.toLowerCase() !== 'path') {
           var pe = document.createElementNS(SVG_NS, 'path');
