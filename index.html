@@ -2669,12 +2669,14 @@
       var attrs = Array.prototype.slice.call(node.attributes || []);
       for (var ai = 0; ai < attrs.length; ai++) {
         var name = attrs[ai].name.toLowerCase();
+        var localName = (attrs[ai].localName || name).toLowerCase();
         var value = attrs[ai].value || '';
-        if (name.slice(0, 2) === 'on' || name === 'xml:base' || name === 'src' || name === 'srcset') {
+        if (localName.slice(0, 2) === 'on' || name === 'xml:base' || localName === 'src' || localName === 'srcset') {
           node.removeAttribute(attrs[ai].name);
           continue;
         }
-        if (name === 'href' || name === 'xlink:href') {
+        // Check localName as well as the prefix: XLink href can use any XML prefix.
+        if (localName === 'href') {
           if (!/^\s*#[\w:.-]+\s*$/.test(value)) node.removeAttribute(attrs[ai].name);
           continue;
         }
