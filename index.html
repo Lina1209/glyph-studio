@@ -1000,6 +1000,8 @@
           id: 'current',
           fontName: payload.fontName,
           glyphs: payload.glyphs,
+          passport: payload.passport,
+          glyphDescriptions: payload.glyphDescriptions,
           savedAt: payload.savedAt
         });
         tx.oncomplete = resolve;
@@ -2048,7 +2050,33 @@
       queueCanvasRender();
       return;
     }
-    if (brushPts) { e.preventDefault(); brushPts.push([p.x, p.y, p.pressure]); queueCanvasRender(); return; }
+    if (brushPts) {
+      e.preventDefault();
+      // High-frequency stylus/touch samples may be coalesced by the browser.
+      // Use them when available; older Safari/WebViews safely fall back to e.
+      var samples = [e];
+      if (typeof e.getCoalescedEvents === 'function') {
+        try {
+          var coalesced = e.getCoalescedEvents();
+          if (coalesced && coalesced.length) samples = coalesced;
+        } catch (sampleError) {}
+      }
+      var lastPoint = brushPts[brushPts.length - 1];
+      for (var sampleIndex = 0; sampleIndex < samples.length; sampleIndex++) {
+        var samplePoint = pos(samples[sampleIndex]);
+        if (!lastPoint || Math.hypot(samplePoint.x - lastPoint[0], samplePoint.y - lastPoint[1]) > 0.01) {
+          lastPoint = [samplePoint.x, samplePoint.y, samplePoint.pressure];
+          brushPts.push(lastPoint);
+        }
+      }
+      // Some implementations omit the dispatched event from the coalesced list.
+      var eventPoint = pos(e);
+      if (!lastPoint || Math.hypot(eventPoint.x - lastPoint[0], eventPoint.y - lastPoint[1]) > 0.01) {
+        brushPts.push([eventPoint.x, eventPoint.y, eventPoint.pressure]);
+      }
+      queueCanvasRender();
+      return;
+    }
     if (tool === 'pen') {
       if (pen.dragging && pen.dragNode) {
         var n = pen.dragNode;
@@ -2098,6 +2126,17 @@
     }
     if (activePointerId !== null && e.pointerId !== activePointerId) return;
     cancelPointerAction();
+  });
+  drawSvg.addEventListener('lostpointercapture', function (e) {
+    // Capture can be lost when a device is disconnected or the browser
+    // interrupts a gesture. Do not leave an unfinished stroke/transform active.
+    if (e.pointerType === 'touch' && Object.prototype.hasOwnProperty.call(touchPointers, e.pointerId)) {
+      delete touchPointers[e.pointerId];
+      if (pinchGesture && touchPointCount() < 2) pinchGesture = null;
+      blockTouchUntilAllUp = touchPointCount() > 0;
+      if (touchPointCount() === 0) blockTouchUntilAllUp = false;
+    }
+    if (activePointerId !== null && e.pointerId === activePointerId) cancelPointerAction();
   });
   drawSvg.addEventListener('pointerleave', function (e) {
     if (tool === 'eraser') { eraserPos = null; renderCanvas(); }
@@ -2606,11 +2645,48 @@
     }
     return '';
   }
+  function sanitizeSvgTree(root) {
+    // SVG parsed with DOMParser is inert, but becomes active when inserted into
+    // the live document. Strip executable content and all external references
+    // before attaching it for geometric measurements.
+    var blocked = root.querySelectorAll('script,foreignObject,iframe,object,embed,image,use,a,animate,animateMotion,animateTransform,set,feImage,video,audio');
+    for (var bi = blocked.length - 1; bi >= 0; bi--) blocked[bi].remove();
+    var nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
+    for (var ni = 0; ni < nodes.length; ni++) {
+      var node = nodes[ni];
+      if (node.tagName && node.tagName.toLowerCase() === 'style') {
+        node.textContent = node.textContent
+          .replace(/@import\\s+[^;]+;?/gi, '')
+          .replace(/url\\(\\s*(['"]?)(?!#)[^)]+\\)/gi, 'none')
+          .replace(/expression\\s*\\([^)]*\\)/gi, 'none');
+      }
+      var attrs = Array.prototype.slice.call(node.attributes || []);
+      for (var ai = 0; ai < attrs.length; ai++) {
+        var name = attrs[ai].name.toLowerCase();
+        var value = attrs[ai].value || '';
+        if (name.slice(0, 2) === 'on' || name === 'xml:base' || name === 'src' || name === 'srcset') {
+          node.removeAttribute(attrs[ai].name);
+          continue;
+        }
+        if (name === 'href' || name === 'xlink:href') {
+          if (!/^\\s*#[\\w:.-]+\\s*$/.test(value)) node.removeAttribute(attrs[ai].name);
+          continue;
+        }
+        if (/url\\(\\s*(['"]?)(?!#)[^)]+\\)/i.test(value) ||
+            /expression\\s*\\(|javascript\\s*:/i.test(value)) {
+          node.removeAttribute(attrs[ai].name);
+        }
+      }
+    }
+  }
   function svgContours(text) {
+    if (typeof text !== 'string' || text.length > 5000000)
+      throw new Error('SVG слишком большой для безопасного импорта (лимит 5 МБ текста).');
     var doc = new DOMParser().parseFromString(text, 'image/svg+xml');
     var root = doc.documentElement;
     if (!root || root.tagName.toLowerCase() !== 'svg' || doc.querySelector('parsererror'))
       throw new Error('Не удалось разобрать SVG');
+    sanitizeSvgTree(root);
     var holder = document.createElement('div');
     holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden;visibility:hidden;';
     var svgClone = document.importNode(root, true);
@@ -2622,6 +2698,8 @@
     var raw = [];
     try {
       var shapes = svgClone.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon');
+      if (shapes.length > 2000) throw new Error('В SVG слишком много графических элементов (максимум 2000).');
+      var totalSamples = 0;
       for (var si = 0; si < shapes.length; si++) {
         var sh = shapes[si];
         var d = shapeToD(sh);
@@ -2642,6 +2720,8 @@
         var ctm = pEl.getCTM() || { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
         var sc = Math.sqrt(Math.abs(ctm.a * ctm.d - ctm.b * ctm.c)) || 1;
         var nSamp = Math.min(2500, Math.max(24, Math.ceil(L / 1.5)));
+        totalSamples += nSamp;
+        if (totalSamples > 200000) throw new Error('SVG слишком сложный для безопасного импорта. Упростите контуры или экспортируйте рисунок в SVG повторно.');
         var step = L / nSamp;
         var sty = getComputedStyle(pEl);
         var fillNone = sty.fill === 'none' || sty.fillOpacity === '0';
