@@ -1,4 +1,4 @@
-const CACHE = 'glyphstudio-v59';
+const CACHE = 'glyphstudio-v60';
 const RUNTIME_CACHE = 'glyphstudio-runtime-v1';
 const ASSETS = [
   './',
