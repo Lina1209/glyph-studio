@@ -2944,6 +2944,7 @@
   $('symFontFile').addEventListener('change', function (e) {
     var file = e.target.files[0];
     if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { alert('Файл шрифта слишком большой (максимум 30 МБ).'); e.target.value = ''; return; }
     file.arrayBuffer().then(function (buf) {
       try {
         loadedFont = opentype.parse(buf);
@@ -2993,12 +2994,15 @@
     e.target.value = '';
   });
   function loadSvgFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('SVG слишком большой для безопасного импорта (максимум 5 МБ).'); return; }
     var r = new FileReader();
     r.onload = function () {
       $('svgText').value = r.result;
       if (!modalOpen) openModal('svg'); else switchTab('svg');
       regenPreview();
     };
+    r.onerror = function () { alert('Не удалось прочитать SVG-файл.'); };
     r.readAsText(file);
   }
   $('svgFile').addEventListener('change', function (e) {
