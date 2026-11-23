@@ -797,7 +797,9 @@
   /* ================= Движок кисти: грузится в фоне, приложение НЕ ждёт ================= */
   var pf = null;
   function dynImport(u) {
-    try { return (new Function('u', 'return import(u)'))(u); }
+    // Native dynamic import works in classic scripts too and avoids eval/new Function,
+    // which would be blocked by stricter Content Security Policies.
+    try { return import(u); }
     catch (e) { return Promise.reject(e); }
   }
   function engineStroke(points, size, thinning) {
