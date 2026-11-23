@@ -2656,9 +2656,9 @@
       var node = nodes[ni];
       if (node.tagName && node.tagName.toLowerCase() === 'style') {
         node.textContent = node.textContent
-          .replace(/@import\\s+[^;]+;?/gi, '')
-          .replace(/url\\(\\s*(['"]?)(?!#)[^)]+\\)/gi, 'none')
-          .replace(/expression\\s*\\([^)]*\\)/gi, 'none');
+          .replace(/@import\s+[^;]+;?/gi, '')
+          .replace(/url\(\s*(['"]?)(?!#)[^)]+\)/gi, 'none')
+          .replace(/expression\s*\([^)]*\)/gi, 'none');
       }
       var attrs = Array.prototype.slice.call(node.attributes || []);
       for (var ai = 0; ai < attrs.length; ai++) {
@@ -2669,11 +2669,11 @@
           continue;
         }
         if (name === 'href' || name === 'xlink:href') {
-          if (!/^\\s*#[\\w:.-]+\\s*$/.test(value)) node.removeAttribute(attrs[ai].name);
+          if (!/^\s*#[\w:.-]+\s*$/.test(value)) node.removeAttribute(attrs[ai].name);
           continue;
         }
-        if (/url\\(\\s*(['"]?)(?!#)[^)]+\\)/i.test(value) ||
-            /expression\\s*\\(|javascript\\s*:/i.test(value)) {
+        if (/url\(\s*(['"]?)(?!#)[^)]+\)/i.test(value) ||
+            /expression\s*\(|javascript\s*:/i.test(value)) {
           node.removeAttribute(attrs[ai].name);
         }
       }
