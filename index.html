@@ -693,19 +693,92 @@
         hIn: { x: F(p.x - tx), y: F(p.y - ty) }, hOut: { x: F(p.x + tx), y: F(p.y + ty) } };
     });
   }
-  function ribbonPoly(pts, w) {
+  function ribbonPoly(pts, w, options) {
+    // Offline fallback: preserve the main brush controls instead of silently
+    // reverting to a fixed-width ribbon when perfect-freehand cannot load.
+    options = options || {};
     var n = pts.length;
     if (n < 2) return [];
-    var L = [], R = [];
+    var thinning = Math.max(0, Math.min(1, Number(options.thinning) || 0));
+    var smoothing = Math.max(0, Math.min(1, Number(options.smoothing) || 0));
+    var streamline = Math.max(0, Math.min(1, Number(options.streamline) || 0));
+    var simulatePressure = options.simulatePressure !== false;
+    var line = [];
     for (var i = 0; i < n; i++) {
-      var a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var l = Math.hypot(dx, dy) || 1;
-      var nx = -dy / l * w / 2, ny = dx / l * w / 2;
-      L.push({ x: pts[i].x + nx, y: pts[i].y + ny });
-      R.push({ x: pts[i].x - nx, y: pts[i].y - ny });
+      var p = pts[i];
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      if (line.length && Math.hypot(p.x - line[line.length - 1].x, p.y - line[line.length - 1].y) < .05) {
+        line[line.length - 1].pressure = p.pressure;
+        continue;
+      }
+      line.push({ x: p.x, y: p.y, pressure: Number.isFinite(p.pressure) ? Math.max(0, Math.min(1, p.pressure)) : .5 });
     }
-    return L.concat(R.reverse());
+    if (line.length < 2) return [];
+    if (streamline > 0) {
+      var filtered = [line[0]];
+      var follow = 1 - streamline * .82;
+      for (var si = 1; si < line.length - 1; si++) {
+        var prev = filtered[filtered.length - 1], raw = line[si];
+        filtered.push({ x: prev.x + (raw.x - prev.x) * follow,
+          y: prev.y + (raw.y - prev.y) * follow, pressure: raw.pressure });
+      }
+      filtered.push(line[line.length - 1]);
+      line = filtered;
+    }
+    var passes = Math.round(smoothing * 3);
+    for (var pass = 0; pass < passes && line.length < 3000; pass++) {
+      var rounded = [line[0]];
+      for (var qi = 0; qi < line.length - 1; qi++) {
+        var a = line[qi], b = line[qi + 1];
+        rounded.push({ x: a.x * .75 + b.x * .25, y: a.y * .75 + b.y * .25,
+          pressure: a.pressure * .75 + b.pressure * .25 });
+        rounded.push({ x: a.x * .25 + b.x * .75, y: a.y * .25 + b.y * .75,
+          pressure: a.pressure * .25 + b.pressure * .75 });
+      }
+      rounded.push(line[line.length - 1]);
+      line = rounded;
+    }
+    var speeds = [], totalSpeed = 0;
+    for (var vi = 0; vi < line.length; vi++) {
+      var before = line[Math.max(0, vi - 1)], after = line[Math.min(line.length - 1, vi + 1)];
+      var speed = Math.hypot(after.x - before.x, after.y - before.y);
+      speeds.push(speed); totalSpeed += speed;
+    }
+    var averageSpeed = totalSpeed / Math.max(1, speeds.length);
+    var radii = [];
+    for (var wi = 0; wi < line.length; wi++) {
+      var pressure = simulatePressure
+        ? Math.max(.18, Math.min(1, 1 - .65 * (speeds[wi] / Math.max(.001, averageSpeed))))
+        : line[wi].pressure;
+      if (wi > 0 && wi < line.length - 1) {
+        pressure = (pressure + line[wi - 1].pressure + line[wi + 1].pressure) / 3;
+      }
+      radii.push(Math.max(.6, w * (1 - thinning + thinning * pressure) / 2));
+    }
+    var left = [], right = [];
+    for (var oi = 0; oi < line.length; oi++) {
+      var pa = line[Math.max(0, oi - 1)], pb = line[Math.min(line.length - 1, oi + 1)];
+      var dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy) || 1;
+      var nx = -dy / len, ny = dx / len, radius = radii[oi];
+      left.push({ x: line[oi].x + nx * radius, y: line[oi].y + ny * radius });
+      right.push({ x: line[oi].x - nx * radius, y: line[oi].y - ny * radius });
+    }
+    // Round end caps prevent the sharp, cut-off appearance of the old fallback.
+    var outline = left.slice(), end = line[line.length - 1], endPrev = line[line.length - 2];
+    var endAngle = Math.atan2(end.y - endPrev.y, end.x - endPrev.x);
+    var endRadius = radii[radii.length - 1];
+    for (var ec = 1; ec <= 8; ec++) {
+      var ea = endAngle + Math.PI / 2 - Math.PI * ec / 8;
+      outline.push({ x: end.x + Math.cos(ea) * endRadius, y: end.y + Math.sin(ea) * endRadius });
+    }
+    outline = outline.concat(right.reverse());
+    var start = line[0], startNext = line[1], startAngle = Math.atan2(startNext.y - start.y, startNext.x - start.x);
+    var startRadius = radii[0];
+    for (var sc = 1; sc < 8; sc++) {
+      var sa = startAngle - Math.PI / 2 - Math.PI * sc / 8;
+      outline.push({ x: start.x + Math.cos(sa) * startRadius, y: start.y + Math.sin(sa) * startRadius });
+    }
+    return outline;
   }
   function outlineToContour(outline) {
     var n = outline.length, nodes = [];
@@ -819,19 +892,20 @@
     catch (e) { return Promise.reject(e); }
   }
   function engineStroke(points, size, thinning) {
+    var options = {
+      size: size || 12,
+      thinning: thinning,
+      smoothing: $('brushSmoothing') ? Number($('brushSmoothing').value) : .5,
+      streamline: $('brushStreamline') ? Number($('brushStreamline').value) : .5,
+      simulatePressure: $('brushPressure') ? $('brushPressure').checked : true
+    };
     if (pf) {
-      try {
-        return pf(points, {
-          size: size, thinning: thinning,
-          smoothing: $('brushSmoothing') ? Number($('brushSmoothing').value) : .5,
-          streamline: $('brushStreamline') ? Number($('brushStreamline').value) : .5,
-          simulatePressure: $('brushPressure') ? $('brushPressure').checked : true,
-          last: true
-        });
-      } catch (e) {}
+      try { return pf(points, Object.assign({}, options, { last: true })); }
+      catch (e) { console.warn('perfect-freehand failed; using offline brush fallback', e); }
     }
-    return ribbonPoly(points.map(function (p) { return { x: p[0], y: p[1] }; }), size || 12)
-      .map(function (p) { return [p.x, p.y]; });
+    return ribbonPoly(points.map(function (p) {
+      return { x: p[0], y: p[1], pressure: p.length > 2 ? p[2] : .5 };
+    }), options.size, options).map(function (p) { return [p.x, p.y]; });
   }
   function loadEngine(i) {
     var urls = [
@@ -839,7 +913,7 @@
       'https://esm.sh/perfect-freehand@1.2.2',
       'https://cdn.skypack.dev/perfect-freehand@1.2.2'
     ];
-    if (i >= urls.length) { $('brushEngine').textContent = '⚠ встроенная кисть (без интернета)'; return; }
+    if (i >= urls.length) { $('brushEngine').textContent = '⚠ встроенная кисть · настройки доступны'; return; }
     var done = false;
     var timer = setTimeout(function () { if (!done) { done = true; loadEngine(i + 1); } }, 7000);
     dynImport(urls[i]).then(function (m) {
