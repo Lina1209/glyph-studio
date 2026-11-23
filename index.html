@@ -900,7 +900,7 @@
       thinning: thinning,
       smoothing: $('brushSmoothing') ? Number($('brushSmoothing').value) : .5,
       streamline: $('brushStreamline') ? Number($('brushStreamline').value) : .5,
-      simulatePressure: $('brushPressure') ? $('brushPressure').checked : true
+      simulatePressure: $('brushPressure') ? !$('brushPressure').checked : false
     };
     if (pf) {
       try { return pf(points, Object.assign({}, options, { last: true })); }
