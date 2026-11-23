@@ -745,13 +745,16 @@
       speeds.push(speed); totalSpeed += speed;
     }
     var averageSpeed = totalSpeed / Math.max(1, speeds.length);
-    var radii = [];
+    var pressureValues = [], radii = [];
     for (var wi = 0; wi < line.length; wi++) {
-      var pressure = simulatePressure
+      pressureValues.push(simulatePressure
         ? Math.max(.18, Math.min(1, 1 - .65 * (speeds[wi] / Math.max(.001, averageSpeed))))
-        : line[wi].pressure;
-      if (wi > 0 && wi < line.length - 1) {
-        pressure = (pressure + line[wi - 1].pressure + line[wi + 1].pressure) / 3;
+        : line[wi].pressure);
+    }
+    for (var ri = 0; ri < line.length; ri++) {
+      var pressure = pressureValues[ri];
+      if (ri > 0 && ri < line.length - 1) {
+        pressure = (pressure + pressureValues[ri - 1] + pressureValues[ri + 1]) / 3;
       }
       radii.push(Math.max(.6, w * (1 - thinning + thinning * pressure) / 2));
     }
@@ -774,7 +777,7 @@
     outline = outline.concat(right.reverse());
     var start = line[0], startNext = line[1], startAngle = Math.atan2(startNext.y - start.y, startNext.x - start.x);
     var startRadius = radii[0];
-    for (var sc = 1; sc < 8; sc++) {
+    for (var sc = 1; sc <= 8; sc++) {
       var sa = startAngle - Math.PI / 2 - Math.PI * sc / 8;
       outline.push({ x: start.x + Math.cos(sa) * startRadius, y: start.y + Math.sin(sa) * startRadius });
     }
