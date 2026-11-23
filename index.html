@@ -189,9 +189,14 @@
 
         <div id="propBrush" class="propgrp hidden">
           <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Толщина
-            <input id="brushSize" type="range" min="4" max="40" value="16" class="w-24"><span id="sizeVal" class="text-slate-300 w-8">16px</span></label>
+            <input id="brushSize" type="range" min="2" max="48" value="16" class="w-20"><span id="sizeVal" class="text-slate-300 w-8">16px</span></label>
           <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Заострение
-            <input id="brushThinning" type="range" min="0" max="0.9" step="0.1" value="0.6" class="w-20"><span id="thinningVal" class="text-slate-300 w-6">0.6</span></label>
+            <input id="brushThinning" type="range" min="0" max="1" step="0.05" value="0.6" class="w-16"><span id="thinningVal" class="text-slate-300 w-6">0.6</span></label>
+          <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Сглаживание
+            <input id="brushSmoothing" type="range" min="0" max="1" step="0.05" value="0.5" class="w-16"><span id="smoothingVal" class="text-slate-300 w-6">0.5</span></label>
+          <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Стабилизация
+            <input id="brushStreamline" type="range" min="0" max="1" step="0.05" value="0.5" class="w-16"><span id="streamlineVal" class="text-slate-300 w-6">0.5</span></label>
+          <label class="text-[10px] text-slate-400 flex items-center gap-1"><input id="brushPressure" type="checkbox" checked class="accent-indigo-500">Давление пера</label>
           <span id="brushEngine" class="text-[10px] text-slate-500">⏳ кисть…</span>
         </div>
 
@@ -199,7 +204,8 @@
 
         <div id="propEraser" class="propgrp hidden">
           <label class="text-[10px] text-slate-400 flex items-center gap-1.5">Размер ластика
-            <input id="eraserSize" type="range" min="4" max="60" value="18" class="w-28"><span id="eraserVal" class="text-slate-300 w-8">18px</span></label>
+            <input id="eraserSize" type="range" min="4" max="80" value="18" class="w-24"><span id="eraserVal" class="text-slate-300 w-8">18px</span></label>
+          <label class="text-[10px] text-slate-400 flex items-center gap-1"><input id="eraserSelectedOnly" type="checkbox" class="accent-indigo-500">Только выбранный объект</label>
         </div>
 
         <div id="propHand" class="propgrp hidden"><span class="text-[10px] text-slate-500">Перетаскивай, чтобы двигать холст. Колесо мыши — зум.</span></div>
@@ -236,19 +242,29 @@
 
         <div id="canvasBox" class="canvas-box rounded-xl shadow-inner overflow-hidden select-none border-2 border-slate-600">
           <svg id="guideSvg" viewBox="0 0 360 360" aria-hidden="true">
-            <line x1="0" y1="70" x2="360" y2="70" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
-            <text x="8" y="65" fill="#94a3b8" font-size="10">Прописные</text>
-            <line x1="0" y1="145" x2="360" y2="145" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
-            <text x="8" y="140" fill="#94a3b8" font-size="10">Строчные</text>
-            <line x1="0" y1="270" x2="360" y2="270" stroke="#f43f5e" stroke-width="1.5"/>
-            <text x="8" y="264" fill="#f43f5e" font-size="10" font-weight="bold">Базовая линия</text>
-            <line x1="0" y1="330" x2="360" y2="330" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1"/>
+            <rect x="16" y="18" width="328" height="324" fill="none" stroke="#94a3b8" stroke-opacity=".42" stroke-dasharray="3 5" stroke-width="1"/>
+            <line x1="180" y1="8" x2="180" y2="352" stroke="#0ea5e9" stroke-opacity=".45" stroke-dasharray="3 5" stroke-width="1"/>
+            <text x="184" y="16" fill="#0284c7" font-size="8">Центр</text>
+            <line x1="16" y1="18" x2="344" y2="18" stroke="#64748b" stroke-dasharray="4 4" stroke-width="1"/>
+            <text x="8" y="14" fill="#64748b" font-size="9">Прописные · 700</text>
+            <line x1="16" y1="90" x2="344" y2="90" stroke="#94a3b8" stroke-dasharray="3 4" stroke-width="1"/>
+            <text x="8" y="85" fill="#64748b" font-size="9">Строчные · 500</text>
+            <line x1="16" y1="270" x2="344" y2="270" stroke="#e11d48" stroke-width="1.5"/>
+            <text x="8" y="264" fill="#e11d48" font-size="9" font-weight="bold">Базовая линия · 0</text>
+            <line x1="16" y1="342" x2="344" y2="342" stroke="#64748b" stroke-dasharray="4 4" stroke-width="1"/>
+            <text x="8" y="336" fill="#64748b" font-size="9">Вынос вниз · −200</text>
+            <line x1="16" y1="18" x2="16" y2="342" stroke="#0d9488" stroke-opacity=".5" stroke-dasharray="2 4"/>
+            <line x1="344" y1="18" x2="344" y2="342" stroke="#0d9488" stroke-opacity=".5" stroke-dasharray="2 4"/>
           </svg>
           <svg id="drawSvg" viewBox="0 0 360 360"></svg>
         </div>
       </div>
 
-      <p class="text-[11px] text-slate-500 mt-2 text-center">Кисть и перо дорисовывают в выделенный объект. Прогресс сохраняется автоматически.</p>
+      <div class="w-full flex items-center justify-center gap-3 mt-2 flex-wrap">
+        <label class="text-[10px] text-slate-400 flex items-center gap-1"><input id="guideVisibility" type="checkbox" checked class="accent-indigo-500">Типографическая сетка</label>
+        <span class="text-[10px] text-slate-500">Ориентиры: прописные · строчные · базовая линия · нижняя граница · центр · боковые поля</span>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-1 text-center">Кисть и перо дорисовывают в выделенный объект. Прогресс сохраняется автоматически.</p>
       <details class="w-full mt-2 text-[11px] text-slate-400 bg-slate-900/50 rounded-lg border border-slate-700/50 px-3 py-2">
         <summary class="cursor-pointer text-slate-300">❓ Подсказки и горячие клавиши</summary>
         <div class="mt-2 grid sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -316,7 +332,7 @@
           <li><b>Проверьте результат:</b> найдите распознанные буквы в библиотеке, откройте их в редакторе и при необходимости поправьте контуры.</li>
           <li><b>Соберите шрифт:</b> после проверки используйте кнопку экспорта TTF в редакторе и сохраните готовый файл шрифта.</li>
         </ol>
-        <p class="text-[10px] sm:text-xs text-slate-400 mt-2">Совет: сначала попробуйте одну страницу. Бланк должен быть заполнен чётко, без теней, бликов и обрезанных краёв. Распознавание переносит контуры, поэтому перед экспортом обязательно проверьте буквы и отверстия внутри них (например, О, Р, В и А).</p>
+        <p class="text-[10px] sm:text-xs text-slate-400 mt-2">Совет: сначала попробуйте одну страницу. Бланк должен быть заполнен чётко, без теней, бликов и обрезанных краёв. Распознавание переносит контуры, поэтому перед экспортом обязательно проверьте буквы и отверстия внутри них (например, О, Р, В и А). Названия и описания, заполненные под ячейками, перенесите в «Паспорт шрифта» после распознавания.</p>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
         <button id="worksheetPrintBtn" type="button" class="pbtn !py-2">⇩ Скачать PDF / печать всех 7 страниц</button>
@@ -677,19 +693,95 @@
         hIn: { x: F(p.x - tx), y: F(p.y - ty) }, hOut: { x: F(p.x + tx), y: F(p.y + ty) } };
     });
   }
-  function ribbonPoly(pts, w) {
+  function ribbonPoly(pts, w, options) {
+    // Offline fallback: preserve the main brush controls instead of silently
+    // reverting to a fixed-width ribbon when perfect-freehand cannot load.
+    options = options || {};
     var n = pts.length;
     if (n < 2) return [];
-    var L = [], R = [];
+    var thinning = Math.max(0, Math.min(1, Number(options.thinning) || 0));
+    var smoothing = Math.max(0, Math.min(1, Number(options.smoothing) || 0));
+    var streamline = Math.max(0, Math.min(1, Number(options.streamline) || 0));
+    var simulatePressure = options.simulatePressure !== false;
+    var line = [];
     for (var i = 0; i < n; i++) {
-      var a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var l = Math.hypot(dx, dy) || 1;
-      var nx = -dy / l * w / 2, ny = dx / l * w / 2;
-      L.push({ x: pts[i].x + nx, y: pts[i].y + ny });
-      R.push({ x: pts[i].x - nx, y: pts[i].y - ny });
+      var p = pts[i];
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      if (line.length && Math.hypot(p.x - line[line.length - 1].x, p.y - line[line.length - 1].y) < .05) {
+        line[line.length - 1].pressure = p.pressure;
+        continue;
+      }
+      line.push({ x: p.x, y: p.y, pressure: Number.isFinite(p.pressure) ? Math.max(0, Math.min(1, p.pressure)) : .5 });
     }
-    return L.concat(R.reverse());
+    if (line.length < 2) return [];
+    if (streamline > 0) {
+      var filtered = [line[0]];
+      var follow = 1 - streamline * .82;
+      for (var si = 1; si < line.length - 1; si++) {
+        var prev = filtered[filtered.length - 1], raw = line[si];
+        filtered.push({ x: prev.x + (raw.x - prev.x) * follow,
+          y: prev.y + (raw.y - prev.y) * follow, pressure: raw.pressure });
+      }
+      filtered.push(line[line.length - 1]);
+      line = filtered;
+    }
+    var passes = Math.round(smoothing * 3);
+    for (var pass = 0; pass < passes && line.length < 3000; pass++) {
+      var rounded = [line[0]];
+      for (var qi = 0; qi < line.length - 1; qi++) {
+        var a = line[qi], b = line[qi + 1];
+        rounded.push({ x: a.x * .75 + b.x * .25, y: a.y * .75 + b.y * .25,
+          pressure: a.pressure * .75 + b.pressure * .25 });
+        rounded.push({ x: a.x * .25 + b.x * .75, y: a.y * .25 + b.y * .75,
+          pressure: a.pressure * .25 + b.pressure * .75 });
+      }
+      rounded.push(line[line.length - 1]);
+      line = rounded;
+    }
+    var speeds = [], totalSpeed = 0;
+    for (var vi = 0; vi < line.length; vi++) {
+      var before = line[Math.max(0, vi - 1)], after = line[Math.min(line.length - 1, vi + 1)];
+      var speed = Math.hypot(after.x - before.x, after.y - before.y);
+      speeds.push(speed); totalSpeed += speed;
+    }
+    var averageSpeed = totalSpeed / Math.max(1, speeds.length);
+    var pressureValues = [], radii = [];
+    for (var wi = 0; wi < line.length; wi++) {
+      pressureValues.push(simulatePressure
+        ? Math.max(.18, Math.min(1, 1 - .65 * (speeds[wi] / Math.max(.001, averageSpeed))))
+        : line[wi].pressure);
+    }
+    for (var ri = 0; ri < line.length; ri++) {
+      var pressure = pressureValues[ri];
+      if (ri > 0 && ri < line.length - 1) {
+        pressure = (pressure + pressureValues[ri - 1] + pressureValues[ri + 1]) / 3;
+      }
+      radii.push(Math.max(.6, w * (1 - thinning + thinning * pressure) / 2));
+    }
+    var left = [], right = [];
+    for (var oi = 0; oi < line.length; oi++) {
+      var pa = line[Math.max(0, oi - 1)], pb = line[Math.min(line.length - 1, oi + 1)];
+      var dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy) || 1;
+      var nx = -dy / len, ny = dx / len, radius = radii[oi];
+      left.push({ x: line[oi].x + nx * radius, y: line[oi].y + ny * radius });
+      right.push({ x: line[oi].x - nx * radius, y: line[oi].y - ny * radius });
+    }
+    // Round end caps prevent the sharp, cut-off appearance of the old fallback.
+    var outline = left.slice(), end = line[line.length - 1], endPrev = line[line.length - 2];
+    var endAngle = Math.atan2(end.y - endPrev.y, end.x - endPrev.x);
+    var endRadius = radii[radii.length - 1];
+    for (var ec = 1; ec <= 8; ec++) {
+      var ea = endAngle + Math.PI / 2 - Math.PI * ec / 8;
+      outline.push({ x: end.x + Math.cos(ea) * endRadius, y: end.y + Math.sin(ea) * endRadius });
+    }
+    outline = outline.concat(right.reverse());
+    var start = line[0], startNext = line[1], startAngle = Math.atan2(startNext.y - start.y, startNext.x - start.x);
+    var startRadius = radii[0];
+    for (var sc = 1; sc <= 8; sc++) {
+      var sa = startAngle - Math.PI / 2 - Math.PI * sc / 8;
+      outline.push({ x: start.x + Math.cos(sa) * startRadius, y: start.y + Math.sin(sa) * startRadius });
+    }
+    return outline;
   }
   function outlineToContour(outline) {
     var n = outline.length, nodes = [];
@@ -797,16 +889,26 @@
   /* ================= Движок кисти: грузится в фоне, приложение НЕ ждёт ================= */
   var pf = null;
   function dynImport(u) {
-    try { return (new Function('u', 'return import(u)'))(u); }
+    // Native dynamic import works in classic scripts too and avoids eval/new Function,
+    // which would be blocked by stricter Content Security Policies.
+    try { return import(u); }
     catch (e) { return Promise.reject(e); }
   }
   function engineStroke(points, size, thinning) {
+    var options = {
+      size: size || 12,
+      thinning: thinning,
+      smoothing: $('brushSmoothing') ? Number($('brushSmoothing').value) : .5,
+      streamline: $('brushStreamline') ? Number($('brushStreamline').value) : .5,
+      simulatePressure: $('brushPressure') ? !$('brushPressure').checked : false
+    };
     if (pf) {
-      try { return pf(points, { size: size, thinning: thinning, smoothing: .5, streamline: .5, last: true }); }
-      catch (e) {}
+      try { return pf(points, Object.assign({}, options, { last: true })); }
+      catch (e) { console.warn('perfect-freehand failed; using offline brush fallback', e); }
     }
-    return ribbonPoly(points.map(function (p) { return { x: p[0], y: p[1] }; }), size || 12)
-      .map(function (p) { return [p.x, p.y]; });
+    return ribbonPoly(points.map(function (p) {
+      return { x: p[0], y: p[1], pressure: p.length > 2 ? p[2] : .5 };
+    }), options.size, options).map(function (p) { return [p.x, p.y]; });
   }
   function loadEngine(i) {
     var urls = [
@@ -814,7 +916,7 @@
       'https://esm.sh/perfect-freehand@1.2.2',
       'https://cdn.skypack.dev/perfect-freehand@1.2.2'
     ];
-    if (i >= urls.length) { $('brushEngine').textContent = '⚠ встроенная кисть (без интернета)'; return; }
+    if (i >= urls.length) { $('brushEngine').textContent = '⚠ встроенная кисть · настройки доступны'; return; }
     var done = false;
     var timer = setTimeout(function () { if (!done) { done = true; loadEngine(i + 1); } }, 7000);
     dynImport(urls[i]).then(function (m) {
@@ -836,7 +938,7 @@
   var SETS = {
     cyr: Array.from('АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'),
     lat: Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'),
-    num: Array.from('0123456789!?.,-:;()«»')
+    num: Array.from('0123456789!?.,—–-:;()[]«»"\\\'@#&/№%+=')
   };
   SETS.all = SETS.cyr.concat(SETS.lat, SETS.num);
   var visibleChars = SETS.cyr;
@@ -1000,6 +1102,8 @@
           id: 'current',
           fontName: payload.fontName,
           glyphs: payload.glyphs,
+          passport: payload.passport,
+          glyphDescriptions: payload.glyphDescriptions,
           savedAt: payload.savedAt
         });
         tx.oncomplete = resolve;
@@ -1862,6 +1966,7 @@
     var list=objs(), scale=1000, cut=eraserClipPath(p,eraserR,scale);
     for (var oi=list.length-1;oi>=0;oi--) {
       var o=list[oi];
+      if ($('eraserSelectedOnly') && $('eraserSelectedOnly').checked && o.id !== sel) continue;
       // Быстрая проверка ограничивающего прямоугольника: далёкие объекты
       // не отправляем в булеву операцию и сохраняем их исходные кривые Безье.
       var bounds=bboxOf(o.contours);
@@ -2048,7 +2153,33 @@
       queueCanvasRender();
       return;
     }
-    if (brushPts) { e.preventDefault(); brushPts.push([p.x, p.y, p.pressure]); queueCanvasRender(); return; }
+    if (brushPts) {
+      e.preventDefault();
+      // High-frequency stylus/touch samples may be coalesced by the browser.
+      // Use them when available; older Safari/WebViews safely fall back to e.
+      var samples = [e];
+      if (typeof e.getCoalescedEvents === 'function') {
+        try {
+          var coalesced = e.getCoalescedEvents();
+          if (coalesced && coalesced.length) samples = coalesced;
+        } catch (sampleError) {}
+      }
+      var lastPoint = brushPts[brushPts.length - 1];
+      for (var sampleIndex = 0; sampleIndex < samples.length; sampleIndex++) {
+        var samplePoint = pos(samples[sampleIndex]);
+        if (!lastPoint || Math.hypot(samplePoint.x - lastPoint[0], samplePoint.y - lastPoint[1]) > 0.01) {
+          lastPoint = [samplePoint.x, samplePoint.y, samplePoint.pressure];
+          brushPts.push(lastPoint);
+        }
+      }
+      // Some implementations omit the dispatched event from the coalesced list.
+      var eventPoint = pos(e);
+      if (!lastPoint || Math.hypot(eventPoint.x - lastPoint[0], eventPoint.y - lastPoint[1]) > 0.01) {
+        brushPts.push([eventPoint.x, eventPoint.y, eventPoint.pressure]);
+      }
+      queueCanvasRender();
+      return;
+    }
     if (tool === 'pen') {
       if (pen.dragging && pen.dragNode) {
         var n = pen.dragNode;
@@ -2098,6 +2229,17 @@
     }
     if (activePointerId !== null && e.pointerId !== activePointerId) return;
     cancelPointerAction();
+  });
+  drawSvg.addEventListener('lostpointercapture', function (e) {
+    // Capture can be lost when a device is disconnected or the browser
+    // interrupts a gesture. Do not leave an unfinished stroke/transform active.
+    if (e.pointerType === 'touch' && Object.prototype.hasOwnProperty.call(touchPointers, e.pointerId)) {
+      delete touchPointers[e.pointerId];
+      if (pinchGesture && touchPointCount() < 2) pinchGesture = null;
+      blockTouchUntilAllUp = touchPointCount() > 0;
+      if (touchPointCount() === 0) blockTouchUntilAllUp = false;
+    }
+    if (activePointerId !== null && e.pointerId === activePointerId) cancelPointerAction();
   });
   drawSvg.addEventListener('pointerleave', function (e) {
     if (tool === 'eraser') { eraserPos = null; renderCanvas(); }
@@ -2242,8 +2384,13 @@
   $('zoomInBtn').onclick = function () { zoomAt(1 / 1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 }); };
   $('zoomOutBtn').onclick = function () { zoomAt(1.25, { x: view.x + view.w / 2, y: view.y + view.w / 2 }); };
   $('zoomResetBtn').onclick = function () { view = { x: 0, y: 0, w: 360 }; setViewBox(); renderCanvas(); };
+  $('guideVisibility').addEventListener('change', function () {
+    guideSvg.style.display = this.checked ? '' : 'none';
+  });
   brushSize.oninput = function () { $('sizeVal').textContent = brushSize.value + 'px'; };
   brushThinning.oninput = function () { $('thinningVal').textContent = brushThinning.value; };
+  $('brushSmoothing').oninput = function () { $('smoothingVal').textContent = this.value; };
+  $('brushStreamline').oninput = function () { $('streamlineVal').textContent = this.value; };
   $('eraserSize').oninput = function () {
     eraserR = Number($('eraserSize').value);
     $('eraserVal').textContent = eraserR + 'px';
@@ -2606,11 +2753,56 @@
     }
     return '';
   }
+  function sanitizeSvgTree(root) {
+    // SVG parsed with DOMParser is inert, but becomes active when inserted into
+    // the live document. Strip executable content and all external references
+    // before attaching it for geometric measurements.
+    var blockedTags = Object.create(null);
+    'script,foreignObject,iframe,object,embed,image,use,a,animate,animateMotion,animateTransform,set,feImage,video,audio'
+      .split(',').forEach(function (tag) { blockedTags[tag.toLowerCase()] = true; });
+    var nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
+    // Use localName as well as tagName so namespace-prefixed SVG elements are covered.
+    for (var bi = nodes.length - 1; bi > 0; bi--) {
+      var blockedName = (nodes[bi].localName || nodes[bi].tagName || '').toLowerCase();
+      if (blockedTags[blockedName]) { nodes[bi].remove(); nodes.splice(bi, 1); }
+    }
+    for (var ni = 0; ni < nodes.length; ni++) {
+      var node = nodes[ni];
+      if (node.localName && node.localName.toLowerCase() === 'style') {
+        node.textContent = node.textContent
+          .replace(/@import\s+[^;]+;?/gi, '')
+          .replace(/url\(\s*(['"]?)(?!#)[^)]+\)/gi, 'none')
+          .replace(/expression\s*\([^)]*\)/gi, 'none');
+      }
+      var attrs = Array.prototype.slice.call(node.attributes || []);
+      for (var ai = 0; ai < attrs.length; ai++) {
+        var name = attrs[ai].name.toLowerCase();
+        var localName = (attrs[ai].localName || name).toLowerCase();
+        var value = attrs[ai].value || '';
+        if (localName.slice(0, 2) === 'on' || name === 'xml:base' || localName === 'src' || localName === 'srcset') {
+          node.removeAttribute(attrs[ai].name);
+          continue;
+        }
+        // Check localName as well as the prefix: XLink href can use any XML prefix.
+        if (localName === 'href') {
+          if (!/^\s*#[\w:.-]+\s*$/.test(value)) node.removeAttribute(attrs[ai].name);
+          continue;
+        }
+        if (/url\(\s*(['"]?)(?!#)[^)]+\)/i.test(value) ||
+            /expression\s*\(|javascript\s*:/i.test(value)) {
+          node.removeAttribute(attrs[ai].name);
+        }
+      }
+    }
+  }
   function svgContours(text) {
+    if (typeof text !== 'string' || text.length > 5000000)
+      throw new Error('SVG слишком большой для безопасного импорта (лимит 5 МБ текста).');
     var doc = new DOMParser().parseFromString(text, 'image/svg+xml');
     var root = doc.documentElement;
     if (!root || root.tagName.toLowerCase() !== 'svg' || doc.querySelector('parsererror'))
       throw new Error('Не удалось разобрать SVG');
+    sanitizeSvgTree(root);
     var holder = document.createElement('div');
     holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden;visibility:hidden;';
     var svgClone = document.importNode(root, true);
@@ -2622,10 +2814,14 @@
     var raw = [];
     try {
       var shapes = svgClone.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon');
+      if (shapes.length > 2000) throw new Error('В SVG слишком много графических элементов (максимум 2000).');
+      var totalSamples = 0, totalPathChars = 0;
       for (var si = 0; si < shapes.length; si++) {
         var sh = shapes[si];
         var d = shapeToD(sh);
         if (!d) continue;
+        totalPathChars += d.length;
+        if (totalPathChars > 2000000) throw new Error('В SVG слишком много данных контуров. Упростите файл перед импортом.');
         var pEl = sh;
         if (sh.tagName.toLowerCase() !== 'path') {
           var pe = document.createElementNS(SVG_NS, 'path');
@@ -2642,6 +2838,8 @@
         var ctm = pEl.getCTM() || { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
         var sc = Math.sqrt(Math.abs(ctm.a * ctm.d - ctm.b * ctm.c)) || 1;
         var nSamp = Math.min(2500, Math.max(24, Math.ceil(L / 1.5)));
+        totalSamples += nSamp;
+        if (totalSamples > 200000) throw new Error('SVG слишком сложный для безопасного импорта. Упростите контуры или экспортируйте рисунок в SVG повторно.');
         var step = L / nSamp;
         var sty = getComputedStyle(pEl);
         var fillNone = sty.fill === 'none' || sty.fillOpacity === '0';
@@ -2746,6 +2944,7 @@
   $('symFontFile').addEventListener('change', function (e) {
     var file = e.target.files[0];
     if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { alert('Файл шрифта слишком большой (максимум 30 МБ).'); e.target.value = ''; return; }
     file.arrayBuffer().then(function (buf) {
       try {
         loadedFont = opentype.parse(buf);
@@ -2762,9 +2961,19 @@
     e.target.value = '';
   });
   function loadPngFile(file) {
+    // Reject oversized source images before canvas/readback allocation. This guard is post-decode.
+    if (file && file.size > 50 * 1024 * 1024) {
+      alert('Файл изображения слишком большой (максимум 50 МБ).');
+      return;
+    }
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
+      if (!img.width || !img.height || img.width * img.height > 40000000) {
+        URL.revokeObjectURL(url);
+        alert('Изображение слишком большое для импорта (максимум 40 млн пикселей).');
+        return;
+      }
       var s = Math.min(1, 360 / Math.max(img.width, img.height));
       var w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s));
       var cv = document.createElement('canvas');
@@ -2785,12 +2994,15 @@
     e.target.value = '';
   });
   function loadSvgFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('SVG слишком большой для безопасного импорта (максимум 5 МБ).'); return; }
     var r = new FileReader();
     r.onload = function () {
       $('svgText').value = r.result;
       if (!modalOpen) openModal('svg'); else switchTab('svg');
       regenPreview();
     };
+    r.onerror = function () { alert('Не удалось прочитать SVG-файл.'); };
     r.readAsText(file);
   }
   $('svgFile').addEventListener('change', function (e) {
